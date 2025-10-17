@@ -1,0 +1,79 @@
+.
+├── assets
+│   └── holistic.gif
+├── configs
+│   ├── baxter
+│   │   ├── depthnet.yaml
+│   │   └── full.yaml
+│   ├── kuka
+│   │   ├── depthnet.yaml
+│   │   └── full.yaml
+│   └── panda
+│       ├── depthnet.yaml
+│       ├── full.yaml
+│       └── self_supervised
+├── data
+│   ├── debug_data
+│   ├── deps
+│   │   ├── baxter-description
+│   │   ├── kuka-description
+│   │   └── panda-description
+│   ├── dream
+│   │   └── real
+│   ├── joblib_cache
+│   └── results
+├── experiments
+│   └── panda_realsense
+│       ├── ckpt
+│       ├── config.yaml
+│       └── result
+├── install.sh
+├── lib
+│   ├── config.py
+│   ├── core
+│   │   ├── config.py
+│   │   └── function.py
+│   ├── dataset
+│   │   ├── augmentations.py
+│   │   ├── const.py
+│   │   ├── dream.py
+│   │   ├── multiepoch_dataloader.py
+│   │   ├── __pycache__
+│   │   ├── roboutils.py
+│   │   └── samplers.py
+│   ├── models
+│   │   ├── backbones
+│   │   ├── ctrnet
+│   │   ├── depth_net.py
+│   │   ├── full_net.py
+│   │   └── __pycache__
+│   ├── __pycache__
+│   │   └── config.cpython-39.pyc
+│   └── utils
+│       ├── BPnP.py
+│       ├── geometries.py
+│       ├── integral.py
+│       ├── mesh_renderer.py
+│       ├── metrics.py
+│       ├── __pycache__
+│       ├── transforms.py
+│       ├── urdfpytorch
+│       ├── urdf_robot.py
+│       ├── utils.py
+│       └── vis.py
+├── models
+│   ├── hrnet_w32-36af842e_roc.pth
+│   ├── panda_segmentation
+│   │   └── realsense.pth
+│   └── pretrained_depthnet
+│       └── panda_pretrained_depthnet.pk
+├── README.md
+├── requirements.txt
+└── scripts
+    ├── test.py
+    ├── train_depthnet.py
+    ├── train_full.py
+    ├── train.py
+    └── train_sim2real.py
+
+36 directories, 40 files
