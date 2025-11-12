@@ -50,8 +50,8 @@ def train_full(args):
     lr_scheduler = get_scheduler(args, optimizer, last_epoch)
  
  
-    for epoch in range(start_epoch, end_epoch + 1):
-        print('In epoch {},  script: full network training (JointNet/RotationNet/KeypoinNet/DepthNet)'.format(epoch + 1))
+    for epoch in tqdm(range(start_epoch, end_epoch + 1)):
+        print('In epoch {},  script: full network training (JointNet/RotationNet/KeypointNet/DepthNet)'.format(epoch + 1))
         model.train()
         iterator = tqdm(ds_iter_train, dynamic_ncols=True)
         losses = AverageValueMeter()

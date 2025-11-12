@@ -14,25 +14,26 @@
 │       └── self_supervised
 ├── data
 │   ├── debug_data
-│   ├── deps
-│   │   ├── baxter-description
-│   │   ├── kuka-description
-│   │   └── panda-description
-│   ├── dream
-│   │   └── real
+│   ├── deps -> /data/yuxuan/robopose/deps
+│   ├── dream -> /data/yuxuan/robopose/dream
 │   ├── joblib_cache
 │   └── results
 ├── experiments
-│   └── panda_realsense
+│   ├── panda_realsense
+│   │   ├── ckpt
+│   │   ├── config.yaml
+│   │   └── result
+│   └── panda_synth_pretrain
 │       ├── ckpt
 │       ├── config.yaml
-│       └── result
+│       └── log
 ├── install.sh
 ├── lib
 │   ├── config.py
 │   ├── core
 │   │   ├── config.py
-│   │   └── function.py
+│   │   ├── function.py
+│   │   └── __pycache__
 │   ├── dataset
 │   │   ├── augmentations.py
 │   │   ├── const.py
@@ -62,18 +63,22 @@
 │       ├── utils.py
 │       └── vis.py
 ├── models
-│   ├── hrnet_w32-36af842e_roc.pth
-│   ├── panda_segmentation
-│   │   └── realsense.pth
-│   └── pretrained_depthnet
-│       └── panda_pretrained_depthnet.pk
+│   ├── hrnet_w32-36af842e_roc.pth -> /data/yuxuan/robopose/hrnet_w32-36af842e_roc.pth
+│   ├── panda_segmentation -> /data/yuxuan/robopose/panda_segmentation
+│   └── pretrained_depthnet -> /data/yuxuan/robopose/pretrained_depthnet
 ├── README.md
+├── README_original.md
 ├── requirements.txt
-└── scripts
-    ├── test.py
-    ├── train_depthnet.py
-    ├── train_full.py
-    ├── train.py
-    └── train_sim2real.py
+├── scripts
+│   ├── __pycache__
+│   │   ├── train_depthnet.cpython-39.pyc
+│   │   ├── train_full.cpython-39.pyc
+│   │   └── train_sim2real.cpython-39.pyc
+│   ├── test.py
+│   ├── train_depthnet.py
+│   ├── train_full.py
+│   ├── train.py
+│   └── train_sim2real.py
+└── tree.txt
 
-36 directories, 40 files
+37 directories, 44 files

@@ -21,7 +21,7 @@ if __name__ == '__main__':
     print("----------------------------------------------------------------------")
     
     if cfg.use_rootnet_with_reg_int_shared_backbone:
-        print(f"\n pipeline: full network training (JointNet/RotationNet/KeypoinNet/DepthNet) \n")
+        print(f"\n pipeline: full network training (JointNet/RotationNet/KeypointNet/DepthNet) \n")
         train_full(cfg)
     
     elif cfg.use_rootnet:
