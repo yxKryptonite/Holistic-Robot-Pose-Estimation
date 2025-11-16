@@ -33,7 +33,7 @@ final_decay : 0.01
 exponent : 0.96
 
 # Training
-batch_size : 48
+batch_size : 96 # 48 for 24GB GPU, 96 for 48GB GPU
 epoch_size : 104950
 n_epochs : 700
 n_dataloader_workers : 6

@@ -2,7 +2,7 @@ pyyaml
 joblib
 pandas
 pyrender
-roboticstoolbox
+roboticstoolbox-python
 thop
 torchnet
 lxml
@@ -13,3 +13,4 @@ seaborn==0.11
 numpy==1.24
 matplotlib==3.7.3
 pycollada
+tensorboard
