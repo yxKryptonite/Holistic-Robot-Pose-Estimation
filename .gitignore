@@ -8,3 +8,6 @@ __pycache__
 /unit_test
 
 run.sh
+
+slurm/
+job_*.sh

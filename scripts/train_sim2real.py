@@ -278,7 +278,7 @@ def train_sim2real(args):
                                                                                 pred_xyz_integral=None,
                                                                                 reference_keypoint_id=args.reference_keypoint_id
                                                                                 )
-                image_dis3d_avg_int, image_dis2d_avg_int = np.array([0],dtype=np.float), np.array([0],dtype=np.float)
+                image_dis3d_avg_int, image_dis2d_avg_int = np.array([0],dtype=float), np.array([0],dtype=float)
                 if pred_keypoints3d_int is not None:
                     image_dis3d_avg_int, image_dis2d_avg_int, batch_dis3d_avg_int, batch_dis2d_avg_int, \
                     batch_l1jointerror_avg_int, image_l1jointerror_avg_int, root_depth_error_int, batch_error_relative_int, _ = compute_metrics_batch(
