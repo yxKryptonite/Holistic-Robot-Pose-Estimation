@@ -7,8 +7,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 from dataset.const import JOINT_BOUNDS, JOINT_NAMES
+#from .backbones.HRnet import get_hrnet
+#from .backbones.Resnet import get_resnet
+#from .backbones.ViT import get_vit
 from .backbones.HRnet import get_hrnet
 from .backbones.Resnet import get_resnet
+from .backbones.ViT import get_vit_backbone   # <-- add this
+
 from utils.geometries import rot6d_to_rotmat, rotmat_to_quat, rotmat_to_rot6d
 from utils.integral import HeatmapIntegralJoint, HeatmapIntegralPose
 from utils.transforms import uvz2xyz_singlepoint
@@ -59,18 +64,53 @@ class RootNetwithRegInt(nn.Module):
         self.n_iter = args.n_iter
         self.norm_type = "softmax"
         self.deconv_dim = [256,256,256]
+        '''
         self.num_joints = nkpt
         self.image_size = args.other_image_size
         self.depth_dim = 64
         self.height_dim = int(self.image_size/4)
         self.width_dim = int(self.image_size/4)
+        '''
+
+        self.num_joints = nkpt
+        self.image_size = args.other_image_size
+
+        # spatial resolution of the heatmap
+        self.height_dim = int(self.image_size / 4)
+        self.width_dim = int(self.image_size / 4)
+
+        # IMPORTANT: keep depth_dim consistent with spatial size
+        # - for 256x256 inputs (ResNet) -> 256/4 = 64 -> depth_dim = 64
+        # - for 224x224 inputs (ViT)    -> 224/4 = 56 -> depth_dim = 56
+        self.depth_dim = self.height_dim
+
         self.bbox_3d_shape = args.bbox_3d_shape
         self.reference_keypoint_id = args.reference_keypoint_id
-        self.integral_layer = HeatmapIntegralPose(backbone=self.backbone_name, num_joints=self.num_joints, depth_dim=self.depth_dim,
-                                                  height_dim=self.height_dim, width_dim=self.width_dim, norm_type=self.norm_type,
-                                                  image_size=self.image_size, bbox_3d_shape=self.bbox_3d_shape, rootid=self.reference_keypoint_id,
-                                                  fixroot=args.fix_root)
+        #self.integral_layer = HeatmapIntegralPose(backbone=self.backbone_name, num_joints=self.num_joints, depth_dim=self.depth_dim,
+                                                 # height_dim=self.height_dim, width_dim=self.width_dim, norm_type=self.norm_type,
+                                                  #image_size=self.image_size, bbox_3d_shape=self.bbox_3d_shape, rootid=self.reference_keypoint_id,
+                                                  #fixroot=args.fix_root)
+        
+        # For the integral module, treat ViT as a ResNet-like backbone
+        integral_backbone_name = self.backbone_name
+        if integral_backbone_name == "vit_base_patch32_224":
+            integral_backbone_name = "resnet50"
+
+        self.integral_layer = HeatmapIntegralPose(
+            backbone=integral_backbone_name,
+            num_joints=self.num_joints,
+            depth_dim=self.depth_dim,
+            height_dim=self.height_dim,
+            width_dim=self.width_dim,
+            norm_type=self.norm_type,
+            image_size=self.image_size,
+            bbox_3d_shape=self.bbox_3d_shape,
+            rootid=self.reference_keypoint_id,
+            fixroot=args.fix_root,
+        )
+    
         self.rotation_dim = args.rotation_dim
+        '''
         if self.backbone_name in ["resnet", "resnet34", "resnet50", "resnet101"]:
             self.reg_backbone = get_resnet(self.backbone_name)
             self.feature_channel = self.reg_backbone.block.expansion * 512
@@ -84,6 +124,87 @@ class RootNetwithRegInt(nn.Module):
         else:
             raise(NotImplementedError)
         
+
+        if self.backbone_name in ["resnet", "resnet34", "resnet50", "resnet101"]:
+            self.reg_backbone = get_resnet(self.backbone_name)
+            self.feature_channel = self.reg_backbone.block.expansion * 512  # 2048 for resnet50
+            self.deconv_layers = self._make_deconv_layer()
+            self.final_layer = nn.Conv2d(
+                self.deconv_dim[2],
+                self.num_joints * self.depth_dim,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+            )
+            # global pooling over feature map
+            self.avgpool = nn.AvgPool2d(int(self.image_size/32), stride=1)
+
+        elif self.backbone_name in ["vit_base_patch32_224", "vit_small_patch32_224"]: 
+            #== "vit_base_patch32_224":
+            # ViT backbone via timm; returns feature map (B, C, 8, 8) for 256x256 input
+            self.reg_backbone = get_vit(self.backbone_name)
+            self.feature_channel = self.reg_backbone.out_channels
+            self.deconv_layers = self._make_deconv_layer()
+            self.final_layer = nn.Conv2d(
+                self.deconv_dim[2],
+                self.num_joints * self.depth_dim,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+            )
+            # use adaptive pooling so we don't assume exact spatial size
+            self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+
+        elif self.backbone_name in ["hrnet", "hrnet32"]:
+            self.reg_backbone = get_hrnet(
+                type_name=32,
+                num_joints=self.num_joints,
+                depth_dim=self.depth_dim,
+                pretrain=True,
+                generate_feat=True,
+                generate_hm=True,
+            )
+            self.feature_channel = 2048
+        else:
+            raise(NotImplementedError)
+        '''
+        
+        if self.backbone_name in ["resnet", "resnet34", "resnet50", "resnet101"]:
+            self.reg_backbone = get_resnet(self.backbone_name)
+            self.feature_channel = self.reg_backbone.block.expansion * 512
+            self.deconv_layers = self._make_deconv_layer()
+            self.final_layer = nn.Conv2d(
+                self.deconv_dim[2], self.num_joints * self.depth_dim,
+                kernel_size=1, stride=1, padding=0
+            )
+            self.avgpool = nn.AvgPool2d(int(self.image_size/32), stride=1)
+
+        elif self.backbone_name in ["hrnet", "hrnet32"]:
+            self.reg_backbone = get_hrnet(
+                type_name=32,
+                num_joints=self.num_joints,
+                depth_dim=self.depth_dim,
+                pretrain=True,
+                generate_feat=True,
+                generate_hm=True,
+            )
+            self.feature_channel = 2048
+
+        elif self.backbone_name.startswith("vit"):
+            # ViT backbone: returns (heatmaps, features)
+            self.reg_backbone, self.feature_channel = get_vit_backbone(
+                self.backbone_name,
+                num_joints=self.num_joints,
+                depth_dim=self.depth_dim,
+                image_size=self.image_size,  # 224 in your synth_vit config
+            )
+
+        else:
+            raise NotImplementedError(f"Unknown backbone: {self.backbone_name}")
+
+
+
+
         self.reg_joint_map = args.reg_joint_map
         if self.reg_joint_map:
             self.joint_conv_dim = args.joint_conv_dim
@@ -288,6 +409,8 @@ class RootNetwithRegInt(nn.Module):
         
         if test_fps:
             t_start_other = time.time() 
+        
+        '''
         # integral uvd xyz
         if self.backbone_name in ["resnet", "resnet50", "resnet34"]:
             x_out = self.reg_backbone(x_reg_input)
@@ -300,6 +423,58 @@ class RootNetwithRegInt(nn.Module):
             out, xf = self.reg_backbone(x_reg_input)
             pred_uvd, pred_xyz_int = self.integral_layer(out, root_trans=root_trans_from_rootnet, K=K)
             pred_root_uv = (pred_uvd[:,self.reference_keypoint_id,:2] + 0.5) * self.image_size
+        
+
+        # integral uvd xyz
+        if self.backbone_name in ["resnet", "resnet50", "resnet34"]:
+            x_out = self.reg_backbone(x_reg_input)
+            xf = self.avgpool(x_out)
+            out = self.deconv_layers(x_out)
+            out = self.final_layer(out)
+            pred_uvd, pred_xyz_int = self.integral_layer(
+                out, root_trans=root_trans_from_rootnet, K=K
+            )
+            pred_root_uv = (pred_uvd[:, self.reference_keypoint_id, :2] + 0.5) * self.image_size
+
+        elif self.backbone_name in ["hrnet", "hrnet32"]:
+            out, xf = self.reg_backbone(x_reg_input)
+            pred_uvd, pred_xyz_int = self.integral_layer(
+                out, root_trans=root_trans_from_rootnet, K=K
+            )
+            pred_root_uv = (pred_uvd[:, self.reference_keypoint_id, :2] + 0.5) * self.image_size
+        '''
+
+        # integral uvd xyz
+        if self.backbone_name in ["resnet", "resnet50", "resnet34"]:
+            # CNN case: backbone -> feature map -> deconv -> heatmaps
+            x_out = self.reg_backbone(x_reg_input)          # (B, C, H/32, W/32)
+            xf = self.avgpool(x_out)                        # (B, C, 1, 1)
+            out = self.deconv_layers(x_out)                 # (B, 256, H/4, W/4)
+            out = self.final_layer(out)                     # (B, num_joints*D, H/4, W/4)
+            pred_uvd, pred_xyz_int = self.integral_layer(
+                out, root_trans=root_trans_from_rootnet, K=K
+            )
+            pred_root_uv = (pred_uvd[:, self.reference_keypoint_id, :2] + 0.5) * self.image_size
+
+        elif self.backbone_name in ["hrnet", "hrnet32"]:
+            # HRNet case: backbone already gives heatmaps + features
+            out, xf = self.reg_backbone(x_reg_input)        # out: (B, num_joints*D, H/4, W/4)
+            pred_uvd, pred_xyz_int = self.integral_layer(
+                out, root_trans=root_trans_from_rootnet, K=K
+            )
+            pred_root_uv = (pred_uvd[:, self.reference_keypoint_id, :2] + 0.5) * self.image_size
+
+        elif self.backbone_name.startswith("vit"):
+            # ViT case: implemented like HRNet wrapper: returns (heatmaps, features)
+            out, xf = self.reg_backbone(x_reg_input)        # out: (B, num_joints*D, H/4, W/4)
+            pred_uvd, pred_xyz_int = self.integral_layer(
+                out, root_trans=root_trans_from_rootnet, K=K
+            )
+            pred_root_uv = (pred_uvd[:, self.reference_keypoint_id, :2] + 0.5) * self.image_size
+
+        else:
+            raise NotImplementedError(f"Backbone '{self.backbone_name}' not supported in RootNetwithRegInt")
+
 
         # root trans (xyz)
         pred_trans = uvz2xyz_singlepoint(pred_root_uv, pred_depth, K)
@@ -397,14 +572,72 @@ class RootNetwithRegInt(nn.Module):
                 return pred_pose, pred_rot, pred_trans, pred_root_uv, pred_depth, pred_uvd, pred_xyz_int, pred_xyz_fk
 
 
-    
+def get_rootNetwithRegInt_model(init_params_dict, args, **kwargs):
+    """ Constructs a rootNetwithRegInt model with ResNet/HRNet/ViT backbone. """
+
+    valid_backbones = [
+        "resnet", "resnet50", "resnet34", "resnet101",
+        "hrnet", "hrnet32",
+        "vit_base_patch32_224", "vit_small_patch32_224",
+    ]
+
+    if args.backbone_name not in valid_backbones:
+        raise(NotImplementedError)
+
+    if args.rootnet_backbone_name not in ["resnet", "resnet50", "resnet34", "hrnet", "hrnet32"]:
+        raise(NotImplementedError)
+
+    model = RootNetwithRegInt(init_params_dict, args, **kwargs)
+
+    # ---- backbone weights init ----
+    # For ViT we already load timm pretrained weights inside ViTBackbone.__init__
+    if args.backbone_name.startswith("vit"):
+        print(f"Skipping init_weights for ViT backbone: {args.backbone_name}")
+    else:
+        model.reg_backbone.init_weights(args.backbone_name)
+
+    # Rootnet backbone: ResNet has custom init, HRNet loads inside get_hrnet
+    if args.rootnet_backbone_name not in ["hrnet", "hrnet32"]:
+        model.rootnet_backbone.init_weights(args.rootnet_backbone_name)
+
+    # ---- load pretrained rootnet if provided (unchanged) ----
+    if args.pretrained_rootnet is not None:
+        pretrained_path = args.pretrained_rootnet
+        pretrained_checkpoint = torch.load(pretrained_path)
+        print(f"Using {args.pretrained_rootnet} as pretrained rootnet weights for rootNetwithRegInt pipeline. ")
+        pretrained_rootnet_weights = pretrained_checkpoint["model_state_dict"]
+        pretrained_weights = {}
+        for k, v in pretrained_rootnet_weights.items():
+            if k.startswith("backbone"):
+                new_k = k.replace("backbone", "rootnet_backbone")
+            else:
+                new_k = k
+            pretrained_weights[new_k] = v
+        model.load_state_dict(pretrained_weights, strict=False)
+    else:
+        print(f"Not using pretrained depthnet weights for the full network training stage. ")
+
+    return model
+
+
+'''    
 def get_rootNetwithRegInt_model(init_params_dict, args, **kwargs):
     """ Constructs a rootNetwithRegInt model with ResNet/Hrnet backbone.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    if args.backbone_name not in ["resnet", "resnet50", "resnet34","resnet101", "hrnet", "hrnet32"]:
+    #if args.backbone_name not in ["resnet", "resnet50", "resnet34","resnet101", "hrnet", "hrnet32"]:
+        #raise(NotImplementedError)
+
+    valid_backbones = [
+        "resnet", "resnet50", "resnet34", "resnet101",
+        "hrnet", "hrnet32",
+        "vit_base_patch32_224", "vit_small_patch32_224",
+    ]
+
+    if args.backbone_name not in valid_backbones:
         raise(NotImplementedError)
+
     if args.rootnet_backbone_name not in ["resnet", "resnet50", "resnet34", "hrnet", "hrnet32"]:
         raise(NotImplementedError)
     
@@ -433,3 +666,4 @@ def get_rootNetwithRegInt_model(init_params_dict, args, **kwargs):
 
     
     return model
+'''

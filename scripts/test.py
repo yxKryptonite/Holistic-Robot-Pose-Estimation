@@ -70,9 +70,16 @@ def test_network(args):
                            rootnet_resize_hw=(args.rootnet_image_size,args.rootnet_image_size), 
                            other_resize_hw=(args.other_image_size,args.other_image_size),
                            color_jitter=False, rgb_augmentation=False, occlusion_augmentation=False)
+    #ds_iter_test = DataLoader(
+        #ds_test, batch_size=args.batch_size, num_workers=min(int(os.environ.get('N_CPUS', 10)) - 2, 8)
+    #)
+
     ds_iter_test = DataLoader(
-        ds_test, batch_size=args.batch_size, num_workers=min(int(os.environ.get('N_CPUS', 10)) - 2, 8)
+        ds_test,
+        batch_size=args.batch_size,
+        num_workers=0   # or 2 if your instance is bigger
     )
+
 
     def farward_loss(test_args,input_batch, device, model, use_view=False, file_name=None, errors=None, train=True, need_flops=False):
         model.eval() 
@@ -291,9 +298,17 @@ def test_network(args):
         view_ids = view_ids_list
 
         view_sampler = ListSampler(view_ids)
+        #ds_iter_test_view = DataLoader(
+            #ds_test, batch_size=args.view_batch_size, sampler=view_sampler, num_workers=min(int(os.environ.get('N_CPUS', 10)) - 2, 8)
+        #)
+
         ds_iter_test_view = DataLoader(
-            ds_test, batch_size=args.view_batch_size, sampler=view_sampler, num_workers=min(int(os.environ.get('N_CPUS', 10)) - 2, 8)
+            ds_test,
+            batch_size=args.view_batch_size,
+            sampler=view_sampler,
+            num_workers=0
         )
+
 
         # low error, good performance
         for batchid, sample in enumerate(tqdm(ds_iter_test_view, dynamic_ncols=True)):
@@ -308,9 +323,16 @@ def test_network(args):
         
         # high error, bad performance
         view_sampler_r = ListSampler(view_ids[::-1])
+        #ds_iter_test_view_r = DataLoader(
+            #ds_test, batch_size=args.view_batch_size, sampler=view_sampler_r, num_workers=min(int(os.environ.get('N_CPUS', 10)) - 2, 8)
+        #)
         ds_iter_test_view_r = DataLoader(
-            ds_test, batch_size=args.view_batch_size, sampler=view_sampler_r, num_workers=min(int(os.environ.get('N_CPUS', 10)) - 2, 8)
+            ds_test,
+            batch_size=args.view_batch_size,
+            sampler=view_sampler_r,
+            num_workers=0
         )
+
         for batchid, sample in enumerate(tqdm(ds_iter_test_view_r, dynamic_ncols=True)):
             error_values = errors[::-1][(batchid * args.view_batch_size):((batchid+1) * args.view_batch_size)]
             print(f"3d errors (m): {error_values}")
@@ -345,7 +367,7 @@ def make_cfg(args):
     cfg.view_batch_size = 4
     cfg.view_batches = 15
 
-    cfg.batch_size = 128
+    cfg.batch_size = 4 #128
     cfg.no_cuda = False
     cfg.device_id = [0]
     cfg.image_size = config["image_size"]

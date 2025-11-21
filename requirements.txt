@@ -2,7 +2,7 @@ pyyaml
 joblib
 pandas
 pyrender
-roboticstoolbox
+roboticstoolbox-python
 thop
 torchnet
 lxml

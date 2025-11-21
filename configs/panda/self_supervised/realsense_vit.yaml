@@ -5,7 +5,9 @@ device_id : [0]
 
 # experiment name (also name of the saving directory)
 # model and log directory : {ROOT}/experiment/{exp_name}/
-exp_name : "panda_realsense_self_supervised" 
+#exp_name : "panda_realsense_self_supervised" 
+exp_name : "panda_realsense_self_supervised_vit"
+
 
 # Data
 urdf_robot_name : "panda"
@@ -14,8 +16,8 @@ val_ds_names : None
 image_size : 256.0
 
 # Model
-backbone_name : "resnet50"
-#backbone_name : "vit_base_patch32_224"
+#backbone_name : "resnet50"
+backbone_name : "vit_base_patch32_224"
 rootnet_backbone_name : "hrnet32"
 rootnet_image_size : 256.0
 other_image_size : 256.0

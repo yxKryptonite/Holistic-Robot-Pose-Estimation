@@ -14,6 +14,7 @@ class ResNet(nn.Module):
         block, layers, channels = resnet_spec[resnet_type]
 
         self.block = block
+        self.out_channels = channels[-1]   # e.g. 2048 for resnet50
         
         self.name = resnet_type
         self.inplanes = 64
