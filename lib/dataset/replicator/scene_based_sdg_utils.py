@@ -223,8 +223,7 @@ def place_prim_on_floor(prim):
     return height_offset
 
 
-@rep.randomizer.register
-def place_camera_in_shell(cam_prim, target_prim, min_dist, max_dist, min_height, max_height):
+def place_camera_in_shell(cam_container_prim, min_dist, max_dist, min_height, max_height):
     radius = np.random.uniform(min_dist, max_dist)
     theta = np.random.uniform(0, 2 * np.pi)
     z_height = np.random.uniform(min_height, max_height)
@@ -233,15 +232,10 @@ def place_camera_in_shell(cam_prim, target_prim, min_dist, max_dist, min_height,
     y = radius * np.sin(theta)
     z = z_height
 
-    with cam_prim:
-        rep.modify.pose(
-            position=(x, y, z),
-            look_at=str(target_prim.GetPath())
-        )
-    return cam_prim.node
+    cam_container_prim.GetAttribute("xformOp:translate").Set(Gf.Vec3d(x, y, z))
 
 
-def randomize_robot_pose(panda_robot, lower_limits, upper_limits):
+def randomize_robot_joints(panda_robot, lower_limits, upper_limits):
     random_pos = np.random.uniform(lower_limits, upper_limits)
     world = World(physics_dt=1.0 / 90.0, stage_units_in_meters=1.0)
     world.reset()

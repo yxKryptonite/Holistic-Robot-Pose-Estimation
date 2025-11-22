@@ -162,15 +162,23 @@ panda_prim = prims.create_prim(
     position=(0, 0, table_height),
     semantic_label="panda_robot"
 )
-robot_cam = rep.create.camera(parent="/World/RobotRig", name="RobotCam")
+robot_cam_container = prims.create_prim(
+    prim_path="/World/RobotRig/RobotCamContainer",
+    prim_type="Xform",
+    position=(0, 0, 0)
+)
+robot_cam = rep.create.camera(
+    parent="/World/RobotRig/RobotCamContainer",
+    name="RobotCam"
+)
 
 # look-at target for the robot camera
-robot_look_target_prim = prims.create_prim(
-    prim_path="/World/RobotRig/RobotLookTarget",
-    prim_type="Xform",
-    position=(0, 0, 1.0)
+robot_look_target_prim = rep.create.xform(
+    position=(0, 0, 1.0),
+    visible=False,
+    parent="/World/RobotRig",
+    name="RobotLookTarget",
 )
-robot_look_target_group = rep.create.group([str(robot_look_target_prim.GetPath())])
 
 rig_path = str(rig_prim.GetPath())
 rig_group = rep.create.group([rig_path])
@@ -279,18 +287,13 @@ with rep.trigger.on_frame():
         )
 
     # robot camera
-    with robot_look_target_group:
+    with robot_look_target_prim:
         rep.modify.pose(
             position=rep.distribution.uniform((-0.4, -0.4, 0.4), (0.4, 0.4, 1.2))
         )
-    rep.randomizer.place_camera_in_shell(
-        cam_prim=robot_cam,
-        target_prim=robot_look_target_prim,
-        min_dist=1.0,
-        max_dist=3.0,
-        min_height=0.5,
-        max_height=2.5
-    )
+    # set robot cam's rotation
+    with robot_cam:
+        rep.modify.pose(look_at=robot_look_target_prim)
 
 # Setup the randomizations to be triggered at every nth frame (interval)
 with rep.trigger.on_frame(interval=4):
@@ -331,7 +334,14 @@ print(f"[scene_based_sdg] Running SDG for {num_frames} frames")
 for i in range(num_frames):
     print(f"[scene_based_sdg] \t Capturing frame {i}")
 
-    scene_based_sdg_utils.randomize_robot_pose(
+    scene_based_sdg_utils.place_camera_in_shell(
+        cam_container_prim=robot_cam_container,
+        min_dist=1.5,
+        max_dist=3.5,
+        min_height=0.5,
+        max_height=2.5
+    )
+    scene_based_sdg_utils.randomize_robot_joints(
         panda_robot, lower_limits, upper_limits
     )
 
