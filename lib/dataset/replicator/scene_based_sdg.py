@@ -30,14 +30,14 @@ config = {
         "renderer": "RaytracedLighting",
         "headless": False,
     },
-    "resolution": [512, 512],
+    "resolution": [640, 480],
     "rt_subframes": 16,
-    "num_frames": 20,
+    "num_frames": 1,
     "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
-    "writer": "BasicWriter",
+    "writer": "DreamWriter",
     "writer_config": {
         "output_dir": "_out_16825",
-        "rgb": True,
+        "resolution": [640, 480],
     },
     "clear_previous_semantics": True,
     "forklift": {
@@ -216,24 +216,11 @@ scene_based_sdg_utils.register_lights_placement(forklift_prim, pallet_prim)
 foklift_pos_gf = forklift_tf.ExtractTranslation()
 driver_cam_pos_gf = foklift_pos_gf + Gf.Vec3d(0.0, 0.0, 1.9)
 
-driver_cam = rep.create.camera(
-    focus_distance=400.0, focal_length=24.0, clipping_range=(0.1, 10000000.0), name="DriverCam"
-)
-
-# Camera looking at the pallet
-pallet_cam = rep.create.camera(name="PalletCam")
-
-# Camera looking at the forklift from a top view with large min clipping to see the scene through the ceiling
-top_view_cam = rep.create.camera(clipping_range=(6.0, 1000000.0), name="TopCam")
-
 # Create render products for the custom cameras and attach them to the writer
 resolution = config.get("resolution", (512, 512))
-forklift_rp = rep.create.render_product(top_view_cam, resolution, name="TopView")
-driver_rp = rep.create.render_product(driver_cam, resolution, name="DriverView")
-pallet_rp = rep.create.render_product(pallet_cam, resolution, name="PalletView")
 robot_rp = rep.create.render_product(robot_cam, resolution, name="RobotView")
 # Disable the render products until SDG to improve perf by avoiding unnecessary rendering
-rps = [forklift_rp, driver_rp, pallet_rp, robot_rp]
+rps = [robot_rp]
 for rp in rps:
     rp.hydra_texture.set_updates_enabled(False)
 
@@ -243,6 +230,10 @@ if not os.path.isabs(config["writer_config"]["output_dir"]):
 print(f"[scene_based_sdg] Output directory={config['writer_config']['output_dir']}")
 
 # Make sure the writer type is in the registry
+from dream_writer import DreamWriter
+
+rep.WriterRegistry.register(DreamWriter)
+
 writer_type = config.get("writer", "BasicWriter")
 if writer_type not in rep.WriterRegistry.get_writers():
     carb.log_error(f"Writer type {writer_type} not found in the registry, closing application..")
@@ -268,23 +259,6 @@ with rep.trigger.on_frame():
             position=rep.distribution.uniform((-20, -2, 0), (-1, 3, 0)),
             rotation=rep.distribution.uniform((0, 0, 0), (0, 0, 360))
         )
-    # Randomize the camera position in the given area above the pallet and look at the pallet prim
-    pallet_cam_min = (pallet_pos_gf[0] - 2, pallet_pos_gf[1] - 2, 2)
-    pallet_cam_max = (pallet_pos_gf[0] + 2, pallet_pos_gf[1] + 2, 4)
-    with pallet_cam:
-        rep.modify.pose(
-            position=rep.distribution.uniform(pallet_cam_min, pallet_cam_max),
-            look_at=str(pallet_prim.GetPrimPath()),
-        )
-
-    # Randomize the camera position in the given height above the forklift driver's seat and look at the pallet prim
-    driver_cam_min = (driver_cam_pos_gf[0], driver_cam_pos_gf[1], driver_cam_pos_gf[2] - 0.25)
-    driver_cam_max = (driver_cam_pos_gf[0], driver_cam_pos_gf[1], driver_cam_pos_gf[2] + 0.25)
-    with driver_cam:
-        rep.modify.pose(
-            position=rep.distribution.uniform(driver_cam_min, driver_cam_max),
-            look_at=str(pallet_prim.GetPrimPath()),
-        )
 
     # robot camera
     with robot_look_target_prim:
@@ -294,16 +268,6 @@ with rep.trigger.on_frame():
     # set robot cam's rotation
     with robot_cam:
         rep.modify.pose(look_at=robot_look_target_prim)
-
-# Setup the randomizations to be triggered at every nth frame (interval)
-with rep.trigger.on_frame(interval=4):
-    top_view_cam_min = (foklift_pos_gf[0], foklift_pos_gf[1], 9)
-    top_view_cam_max = (foklift_pos_gf[0], foklift_pos_gf[1], 11)
-    with top_view_cam:
-        rep.modify.pose(
-            position=rep.distribution.uniform(top_view_cam_min, top_view_cam_max),
-            rotation=rep.distribution.uniform((0, -90, -30), (0, -90, 30)),
-        )
 
 # Setup the randomizations to be manually triggered at specific times
 with rep.trigger.on_custom_event("randomize_cones"):
