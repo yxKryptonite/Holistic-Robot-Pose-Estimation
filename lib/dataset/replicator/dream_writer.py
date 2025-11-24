@@ -40,24 +40,25 @@ def get_robot_links_and_joints(prim):
 
 
 class DreamWriter(rep.Writer):
-    def __init__(self, output_dir, resolution):
+    def __init__(self, output_dir: str, resolution: tuple, semantic_classes: list[str]):
         self.output_dir = output_dir
         self.resolution = resolution
         self.frame_id = 0
 
         self.backend = rep.BackendDispatch({"paths": {"out_dir": self.output_dir}})
 
+        self.semantic_classes = "|".join(semantic_classes)
         # Register necessary annotators
         self.annotators = [
             rep.AnnotatorRegistry.get_annotator("rgb"),
             rep.AnnotatorRegistry.get_annotator("camera_params"),
             rep.AnnotatorRegistry.get_annotator(
                 "bounding_box_2d_tight",
-                init_params={"semanticTypes": ["class"]}
+                init_params={"semanticFilter": f"class:{self.semantic_classes}"},
             ),
             rep.AnnotatorRegistry.get_annotator(
                 "bounding_box_3d",
-                init_params={"semanticFilter": "class:*"}
+                init_params={"semanticFilter": f"class:{self.semantic_classes}"},
             ),
         ]
 
@@ -77,7 +78,7 @@ class DreamWriter(rep.Writer):
         # --- SAVE EVERY FRAME ---
         filename = f"{self.frame_id:06d}"
         # 3. Save RGB Image
-        self.backend.write_image(f"{filename}.png", data["rgb"])
+        self.backend.write_image(f"{filename}.rgb.jpg", data["rgb"])
 
         # 4. camera_data
         camera_data = self._extract_camera_data(cam_params)

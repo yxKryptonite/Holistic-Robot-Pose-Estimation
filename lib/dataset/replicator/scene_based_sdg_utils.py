@@ -242,3 +242,92 @@ def randomize_robot_joints(panda_robot, lower_limits, upper_limits):
     panda_robot.initialize()
     panda_robot.set_joint_positions(random_pos)
     world.step(render=False)
+
+
+def register_flying_distractors(
+    distractor_grp_path,
+    panda_prim,
+    asset_root_path,
+    asset_list,
+    volume_min,
+    volume_max
+):
+    volume_prim = rep.create.cube(
+        position=(
+            (volume_min[0]+volume_max[0])/2,
+            (volume_min[1]+volume_max[1])/2,
+            (volume_min[2]+volume_max[2])/2
+        ),
+        scale=(
+            volume_max[0]-volume_min[0],
+            volume_max[1]-volume_min[1],
+            volume_max[2]-volume_min[2]
+        ),
+        visible=False,
+        name="DistractorVolume",
+    )
+
+    # create some rough collision geometry for the robot
+    robot_path = str(panda_prim.GetPath())
+
+    link0_collision = rep.create.cylinder(
+        parent=f"{robot_path}/panda_link0",
+        position=(0, 0, 0.13), scale=(0.3, 0.3, 0.3),
+        visible=False, name="Link0Collision"
+    )
+    link2_collision = rep.create.cylinder(
+        parent=f"{robot_path}/panda_link2",
+        position=(0, -0.1, 0),
+        rotation=(90, 0, 0),
+        scale=(0.25, 0.25, 0.3),
+        visible=False, name="Link2Collision"
+    )
+    link4_collision = rep.create.cylinder(
+        parent=f"{robot_path}/panda_link4",
+        position=(0, 0, 0), scale=(0.2, 0.2, 0.25),
+        visible=False, name="Link4Collision"
+    )
+    link5_collision = rep.create.cylinder(
+        parent=f"{robot_path}/panda_link5",
+        position=(0, 0, -0.1), scale=(0.2, 0.2, 0.4),
+        visible=False, name="Link5Collision"
+    )
+    hand_collision = rep.create.sphere(
+        parent=f"{robot_path}/panda_hand",
+        position=(0, 0, 0.1), scale=0.25,
+        visible=False, name="HandCollision"
+    )
+    robot_collision_prims = [
+        link0_collision, link2_collision,
+        link4_collision, link5_collision, hand_collision
+    ]
+
+    distractor_instances = []
+    for i, asset in enumerate(asset_list):
+        obj = rep.create.from_usd(
+            usd=asset_root_path + asset["url"],
+            semantics=[("class", asset["class"])],
+            count=1,
+            parent=distractor_grp_path,
+            name=f"Distractor_{i}"
+        )
+        distractor_instances.append(obj)
+
+    def randomize_distractors():
+        distractor_group = rep.create.group(distractor_instances)
+
+        with distractor_group:
+            rep.randomizer.scatter_3d(
+                volume_prims=volume_prim,
+                no_coll_prims=robot_collision_prims,
+                volume_excl_prims=robot_collision_prims,
+                check_for_collisions=True,
+            )
+            rep.modify.pose(
+                rotation=rep.distribution.uniform((0, 0, 0), (360, 360, 360)),
+                scale=rep.distribution.uniform(0.8, 1.2)
+            )
+
+        return distractor_group.node
+
+    rep.randomizer.register(randomize_distractors)

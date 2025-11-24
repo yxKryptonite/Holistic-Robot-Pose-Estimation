@@ -32,7 +32,7 @@ config = {
     },
     "resolution": [640, 480],
     "rt_subframes": 16,
-    "num_frames": 1,
+    "num_frames": 10,
     "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
     "writer": "DreamWriter",
     "writer_config": {
@@ -64,6 +64,64 @@ config = {
         "url": "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_04.usd",
         "class": "cardbox",
     },
+    "distractors": [
+        {
+            "url": "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_04.usd",
+            "class": "cardbox",
+        },
+        {
+            "url": "/Isaac/Environments/Simple_Warehouse/Props/S_TrafficCone.usd",
+            "class": "traffic_cone",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/009_gelatin_box.usd",
+            "class": "009_gelatin_box",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/003_cracker_box.usd",
+            "class": "003_cracker_box",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/004_sugar_box.usd",
+            "class": "004_sugar_box",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/010_potted_meat_can.usd",
+            "class": "010_potted_meat_can",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/035_power_drill.usd",
+            "class": "035_power_drill",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/011_banana.usd",
+            "class": "011_banana",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/006_mustard_bottle.usd",
+            "class": "006_mustard_bottle",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/002_master_chef_can.usd",
+            "class": "002_master_chef_can",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/005_tomato_soup_can.usd",
+            "class": "005_tomato_soup_can",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/019_pitcher_base.usd",
+            "class": "019_pitcher_base",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/007_tuna_fish_can.usd",
+            "class": "007_tuna_fish_can",
+        },
+        {
+            "url": "/Isaac/Props/YCB/Axis_Aligned/008_pudding_box.usd",
+            "class": "008_pudding_box",
+        }
+    ],
     "close_app_after_run": True,
 }
 
@@ -183,6 +241,12 @@ robot_look_target_prim = rep.create.xform(
 rig_path = str(rig_prim.GetPath())
 rig_group = rep.create.group([rig_path])
 
+# flying distractors
+distractor_container = prims.create_prim(
+    prim_path="/World/RobotRig/Distractors",
+    prim_type="Xform",
+)
+
 # Spawn a new forklift at a random pose
 forklift_prim = prims.create_prim(
     prim_path="/World/Forklift",
@@ -208,6 +272,14 @@ pallet_prim = prims.create_prim(
 )
 
 # Register randomization graphs
+scene_based_sdg_utils.register_flying_distractors(
+    distractor_grp_path="/World/RobotRig/Distractors",
+    asset_root_path=assets_root_path,
+    asset_list=config["distractors"],
+    panda_prim=panda_prim,
+    volume_min=(-2.0, -2.0, 0.5),
+    volume_max=(2.0, 2.0, 2.5)
+)
 scene_based_sdg_utils.register_scatter_boxes(pallet_prim, assets_root_path, config)
 scene_based_sdg_utils.register_cone_placement(forklift_prim, assets_root_path, config)
 scene_based_sdg_utils.register_lights_placement(forklift_prim, pallet_prim)
@@ -243,7 +315,12 @@ if writer_type not in rep.WriterRegistry.get_writers():
 writer = rep.WriterRegistry.get(writer_type)
 writer_kwargs = config["writer_config"]
 print(f"[scene_based_sdg] Initializing {writer_type} with: {writer_kwargs}")
-writer.initialize(**writer_kwargs)
+writer.initialize(
+    **writer_kwargs,
+    semantic_classes=["panda_robot"] + [
+        config["distractors"][i]["class"] for i in range(len(config["distractors"]))
+    ]
+)
 
 # Attach writer to the render products
 writer.attach(rps)
@@ -268,6 +345,9 @@ with rep.trigger.on_frame():
     # set robot cam's rotation
     with robot_cam:
         rep.modify.pose(look_at=robot_look_target_prim)
+
+    # flying distractors
+    rep.randomizer.randomize_distractors()
 
 # Setup the randomizations to be manually triggered at specific times
 with rep.trigger.on_custom_event("randomize_cones"):
