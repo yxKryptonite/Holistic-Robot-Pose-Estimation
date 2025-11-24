@@ -48,10 +48,44 @@ config = {
         "url": "/Isaac/Robots/FrankaRobotics/FrankaPanda/franka.usd",
         "class": "panda_robot",
     },
-    "table": {
-        "url": "/Isaac/Props/Mounts/Stand/stand.usd",
-        "class": "table",
-    },
+    "tables": [
+        {
+            "url": "/Isaac/Props/Mounts/thor_table.usd",
+            "class": "table",
+        },
+        {
+            "url": "/Isaac/Props/PackingTable/props/SM_HeavyDutyPackingTable_C02_01/SM_HeavyDutyPackingTable_C02_01.usd",
+            "class": "table",
+        },
+        {
+            "url": "/Isaac/Environments/Simple_Room/Props/table_low.usd",
+            "class": "table",
+        },
+        {
+            "url": "/Isaac/Environments/Hospital/Props/SM_SideTable_02a.usd",
+            "class": "table",
+        },
+        {
+            "url": "/Isaac/Environments/Office/Props/SM_TableA.usd",
+            "class": "table",
+        },
+        {
+            "url": "/Isaac/Environments/Office/Props/SM_TableB.usd",
+            "class": "table",
+        },
+        {
+            "url": "/Isaac/Environments/Office/Props/SM_TableC.usd",
+            "class": "table",
+        },
+        {
+            "url": "/Isaac/Environments/Office/Props/SM_TableD.usd",
+            "class": "table",
+        },
+        {
+            "url": "/Isaac/Environments/Office/Props/SM_TableD2.usd",
+            "class": "table",
+        },
+    ],
     "cone": {
         "url": "/Isaac/Environments/Simple_Warehouse/Props/S_TrafficCone.usd",
         "class": "traffic_cone",
@@ -162,11 +196,12 @@ import omni.usd
 
 # Custom util functions for the example
 import scene_based_sdg_utils
+from isaacsim.core.api import World
 from isaacsim.core.utils import prims
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.stage import get_current_stage, open_stage
 from isaacsim.storage.native import get_assets_root_path
-from pxr import Gf
+from pxr import Gf, UsdGeom
 
 from isaacsim.core.prims import Articulation
 import numpy as np
@@ -195,7 +230,6 @@ if config["clear_previous_semantics"]:
     scene_based_sdg_utils.remove_previous_semantics(stage)
 
 # Spawn a panda robot at a random pose
-table_usd = assets_root_path + config["table"]["url"]
 robot_usd = assets_root_path + config["panda_robot"]["url"]
 
 rig_prim = prims.create_prim(
@@ -204,20 +238,30 @@ rig_prim = prims.create_prim(
     position=(0, 0, 0)
 )
 
-# 3. Create the Table INSIDE the Rig
-table_prim = prims.create_prim(
-    prim_path="/World/RobotRig/Table",
-    usd_path=table_usd,
-    position=(0, 0, 0),
-    scale=(1.2, 1.2, 1.2),
+# create a common tabletop
+tabletop_height = 0.7
+tabletop_plane = rep.create.plane(
+    position=(0, 0, tabletop_height),
+    scale=1.5,
+    visible=False,
+    name="TabletopPlane",
 )
-table_height = scene_based_sdg_utils.place_prim_on_floor(table_prim)
 
-# 4. Create the Robot INSIDE the Rig (Lifted by table_height)
+# spawn the tables
+table_container_path = "/World/RobotRig/TableContainer"
+prims.create_prim(table_container_path, "Xform")
+
+table_variations = scene_based_sdg_utils.spawn_table_variations(
+    parent_path=table_container_path,
+    table_configs=config["tables"],
+    assets_root_path=assets_root_path,
+    target_height=tabletop_height
+)
+
 panda_prim = prims.create_prim(
     prim_path="/World/RobotRig/Panda",
     usd_path=robot_usd,
-    position=(0, 0, table_height),
+    position=(0, 0, tabletop_height),
     semantic_label="panda_robot"
 )
 robot_cam_container = prims.create_prim(
@@ -247,30 +291,6 @@ distractor_container = prims.create_prim(
     prim_type="Xform",
 )
 
-# Spawn a new forklift at a random pose
-forklift_prim = prims.create_prim(
-    prim_path="/World/Forklift",
-    position=(random.uniform(-20, -2), random.uniform(-1, 3), 0),
-    orientation=euler_angles_to_quat([0, 0, random.uniform(0, math.pi)]),
-    usd_path=assets_root_path + config["forklift"]["url"],
-    semantic_label=config["forklift"]["class"],
-)
-
-# Spawn the pallet in front of the forklift with a random offset on the Y (pallet's forward) axis
-forklift_tf = omni.usd.get_world_transform_matrix(forklift_prim)
-pallet_offset_tf = Gf.Matrix4d().SetTranslate(Gf.Vec3d(0, random.uniform(-1.2, -1.8), 0))
-pallet_pos_gf = (pallet_offset_tf * forklift_tf).ExtractTranslation()
-forklift_quat_gf = forklift_tf.ExtractRotationQuat()
-forklift_quat_xyzw = (forklift_quat_gf.GetReal(), *forklift_quat_gf.GetImaginary())
-
-pallet_prim = prims.create_prim(
-    prim_path="/World/Pallet",
-    position=pallet_pos_gf,
-    orientation=forklift_quat_xyzw,
-    usd_path=assets_root_path + config["pallet"]["url"],
-    semantic_label=config["pallet"]["class"],
-)
-
 # Register randomization graphs
 scene_based_sdg_utils.register_flying_distractors(
     distractor_grp_path="/World/RobotRig/Distractors",
@@ -280,13 +300,7 @@ scene_based_sdg_utils.register_flying_distractors(
     volume_min=(-2.0, -2.0, 0.5),
     volume_max=(2.0, 2.0, 2.5)
 )
-scene_based_sdg_utils.register_scatter_boxes(pallet_prim, assets_root_path, config)
-scene_based_sdg_utils.register_cone_placement(forklift_prim, assets_root_path, config)
-scene_based_sdg_utils.register_lights_placement(forklift_prim, pallet_prim)
-
-# Spawn a camera in the driver's location looking at the pallet
-foklift_pos_gf = forklift_tf.ExtractTranslation()
-driver_cam_pos_gf = foklift_pos_gf + Gf.Vec3d(0.0, 0.0, 1.9)
+scene_based_sdg_utils.register_lights_placement(panda_prim)
 
 # Create render products for the custom cameras and attach them to the writer
 resolution = config.get("resolution", (512, 512))
@@ -327,7 +341,6 @@ writer.attach(rps)
 
 # Setup the randomizations to be triggered every frame
 with rep.trigger.on_frame():
-    rep.randomizer.scatter_boxes()
     rep.randomizer.randomize_lights()
 
     # Randomize the panda base pose
@@ -349,14 +362,10 @@ with rep.trigger.on_frame():
     # flying distractors
     rep.randomizer.randomize_distractors()
 
-# Setup the randomizations to be manually triggered at specific times
-with rep.trigger.on_custom_event("randomize_cones"):
-    rep.randomizer.place_cones()
-
-# Run a simulation by dropping randomly placed boxes on a pallet next to the forklift
-scene_based_sdg_utils.simulate_falling_objects(forklift_prim, assets_root_path, config)
-
 # Initialize the Robot
+world = World(physics_dt=1.0 / 90.0, stage_units_in_meters=1.0)
+world.reset()
+
 panda_robot = Articulation(str(panda_prim.GetPrimPath()))
 
 # Cache limits
@@ -378,6 +387,16 @@ print(f"[scene_based_sdg] Running SDG for {num_frames} frames")
 for i in range(num_frames):
     print(f"[scene_based_sdg] \t Capturing frame {i}")
 
+    # toggle one table
+    active_idx = random.randint(0, len(table_variations) - 1)
+    for idx, table_prim in enumerate(table_variations):
+        imageable = UsdGeom.Imageable(table_prim)
+        if idx == active_idx:
+            imageable.MakeVisible()
+        else:
+            imageable.MakeInvisible()
+
+    # randomize camera
     scene_based_sdg_utils.place_camera_in_shell(
         cam_container_prim=robot_cam_container,
         min_dist=1.5,
@@ -385,13 +404,11 @@ for i in range(num_frames):
         min_height=0.5,
         max_height=2.5
     )
+    # randomize robot joints
     scene_based_sdg_utils.randomize_robot_joints(
         panda_robot, lower_limits, upper_limits
     )
 
-    # Trigger the custom event to randomize the cones at specific frames
-    if i % 2 == 0:
-        rep.utils.send_og_event(event_name="randomize_cones")
     # Trigger any on_frame registered randomizers and the writers (delta_time=0.0 to avoid advancing the timeline)
     rep.orchestrator.step(delta_time=0.0, rt_subframes=rt_subframes)
 

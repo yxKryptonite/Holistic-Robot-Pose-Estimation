@@ -191,9 +191,9 @@ def register_cone_placement(forklift_prim, assets_root_path, config):
 
 
 # Register light randomization graph
-def register_lights_placement(forklift_prim, pallet_prim):
+def register_lights_placement(robot_prim):
     bb_cache = create_bbox_cache()
-    combined_range_arr = compute_combined_aabb(bb_cache, [forklift_prim.GetPrimPath(), pallet_prim.GetPrimPath()])
+    combined_range_arr = compute_combined_aabb(bb_cache, [robot_prim.GetPrimPath()])
     pos_min = (combined_range_arr[0], combined_range_arr[1], 6)
     pos_max = (combined_range_arr[3], combined_range_arr[4], 7)
 
@@ -221,6 +221,53 @@ def place_prim_on_floor(prim):
         new_pos = Gf.Vec3d(current_pos[0], current_pos[1], height_offset)
         prim.GetAttribute("xformOp:translate").Set(new_pos)
     return height_offset
+
+
+def spawn_table_variations(parent_path, table_configs, assets_root_path, target_height):
+    """
+    Spawns all tables from the config, uniformly scales them to match the target_height,
+    and sets them to invisible by default.
+    """
+    table_prims = []
+    for i, config in enumerate(table_configs):
+        prim_path = f"{parent_path}/Table_{i}"
+
+        prim = prims.create_prim(
+            prim_path=prim_path,
+            usd_path=assets_root_path + config["url"],
+            semantic_label=config["class"],
+        )
+
+        # compute the height
+        bbox_cache = UsdGeom.BBoxCache(
+            Usd.TimeCode.Default(), [UsdGeom.Tokens.default_]
+        )
+        bounds = bbox_cache.ComputeLocalBound(prim).GetRange()
+        min_z = bounds.GetMin()[2]
+        max_z = bounds.GetMax()[2]
+        original_height = max_z - min_z
+
+        # scale
+        assert original_height > 0, f"Table at {prim_path} has zero height!"
+        scale_ratio = target_height / original_height
+
+        prim.GetAttribute("xformOp:scale").Set(
+            Gf.Vec3f(scale_ratio, scale_ratio, scale_ratio)
+        )
+        offset_z = -(min_z * scale_ratio)
+        prim.GetAttribute("xformOp:translate").Set(Gf.Vec3d(0, 0, offset_z))
+
+        # disable physics
+        for p in Usd.PrimRange(prim):
+            if p.HasAPI(UsdPhysics.RigidBodyAPI):
+                phys_api = UsdPhysics.RigidBodyAPI(p)
+                phys_api.CreateRigidBodyEnabledAttr().Set(False)
+
+        #  set invisible
+        UsdGeom.Imageable(prim).MakeInvisible()
+        table_prims.append(prim)
+
+    return table_prims
 
 
 def place_camera_in_shell(cam_container_prim, min_dist, max_dist, min_height, max_height):
