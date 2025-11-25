@@ -96,10 +96,12 @@ class DreamWriter(rep.Writer):
 
         # cache sim_state camera
         if self.sim_state_camera is None:
+            pos_cm = camera_data["location_worldframe"]
+            pos_m = [x / 100.0 for x in pos_cm]  # to m
             self.sim_state_camera = dict(
                 name="sim_cam",
                 pose=dict(
-                    position=camera_data["location_worldframe"],
+                    position=pos_m,
                     orientation=camera_data["quaternion_xyzw_worldframe"],
                 )
             )
@@ -169,8 +171,9 @@ class DreamWriter(rep.Writer):
         robot_val = []
         robot_key = []
         if "panda_robot" in self.discovered_classes:
-            robot_key = ["panda_robot"]
+            robot_key = ["franka"]
             robot_val = [self.discovered_classes.pop("panda_robot")]
+            robot_val[0]["class"] = "franka"
         exported_objects = robot_val + list(self.discovered_classes.values())
         exported_classes = robot_key + list(self.discovered_classes.keys())
 
@@ -188,13 +191,13 @@ class DreamWriter(rep.Writer):
         cam2world = world2cam.GetInverse()
 
         pos = cam2world.ExtractTranslation()
-        pos = [pos[0], pos[1], pos[2]]
+        pos = [pos[0] * 100.0, pos[1] * 100.0, pos[2] * 100.0]  # to cm
         rot = cam2world.ExtractRotationQuat()
         quat = [
-            rot.GetReal(),
             rot.GetImaginary()[0],
             rot.GetImaginary()[1],
             rot.GetImaginary()[2],
+            rot.GetReal(),
         ]
 
         return {"location_worldframe": pos, "quaternion_xyzw_worldframe": quat}
@@ -248,9 +251,9 @@ class DreamWriter(rep.Writer):
             if len(self.discovered_classes) < self.num_objects_required:
                 if semantic_class not in self.discovered_classes:
                     # dims in cm
-                    width = (x_max - x_min) * 100.0
-                    height = (y_max - y_min) * 100.0
-                    depth = (z_max - z_min) * 100.0
+                    width = (x_max - x_min) * 100.0  # to cm
+                    height = (y_max - y_min) * 100.0  # to cm
+                    depth = (z_max - z_min) * 100.0  # to cm
 
                     self.discovered_classes[semantic_class] = {
                         "class": semantic_class,
@@ -262,7 +265,7 @@ class DreamWriter(rep.Writer):
                             [0, -1, 0, 0],
                             [0, 0, 0, 1]
                         ],
-                        "cuboid_dimensions": [width, height, depth]
+                        "cuboid_dimensions": [height, depth, width]
                     }
                     self._flush_object_settings()
 
@@ -297,6 +300,9 @@ class DreamWriter(rep.Writer):
                 max_x = min(width, max(x_coords))
                 max_y = min(height, max(y_coords))
 
+                if max_x <= min_x: max_x = min_x + 1
+                if max_y <= min_y: max_y = min_y + 1
+
                 bbox_2d_entry = {
                     "min": [float(min_x), float(min_y)],
                     "max": [float(max_x), float(max_y)],
@@ -317,9 +323,9 @@ class DreamWriter(rep.Writer):
                     {
                         "name": "Root",
                         "location": [
-                            centroid_world[0],
-                            centroid_world[1],
-                            centroid_world[2],
+                            centroid_world[0] * 100.0, # to cm
+                            centroid_world[1] * 100.0, # to cm
+                            centroid_world[2] * 100.0, # to cm
                         ],
                         "projected_location": projected_centroid,
                     }
@@ -329,26 +335,32 @@ class DreamWriter(rep.Writer):
             trans = gf_transform.ExtractTranslation()
             rot = gf_transform.ExtractRotation().GetQuaternion()
             quat = [
-                rot.GetReal(),
                 rot.GetImaginary()[0],
                 rot.GetImaginary()[1],
                 rot.GetImaginary()[2],
+                rot.GetReal(),
             ]
+
+            # convert pose transform translation to cm
+            pose_transform_cm = np.array(bbox_3d_data[idx]["transform"])
+            pose_transform_cm[3, 0] *= 100.0 # to cm
+            pose_transform_cm[3, 1] *= 100.0 # to cm
+            pose_transform_cm[3, 2] *= 100.0 # to cm
 
             obj_entry = {
                 "class": semantic_class,
                 "visibility": 1,
-                "location": [trans[0], trans[1], trans[2]],
+                "location": [trans[0] * 100.0, trans[1] * 100.0, trans[2] * 100.0], # to cm
                 "quaternion_xyzw": quat,
-                "pose_transform": bbox_3d_data[idx]["transform"].tolist(),
+                "pose_transform": pose_transform_cm.tolist(), # to cm
                 "cuboid_centroid": [
-                    centroid_world[0],
-                    centroid_world[1],
-                    centroid_world[2],
+                    centroid_world[0] * 100.0, # to cm
+                    centroid_world[1] * 100.0, # to cm
+                    centroid_world[2] * 100.0, # to cm
                 ],
                 "projected_cuboid_centroid": projected_centroid,
                 "bounding_box": semantic_id_to_bbox_2d[semantic_id],
-                "cuboid": [[c[0], c[1], c[2]] for c in corners_world],
+                "cuboid": [[c[0] * 100.0, c[1] * 100.0, c[2] * 100.0] for c in corners_world], # to cm
                 "projected_cuboid": projected_cuboid,
                 "keypoints": keypoints,
             }
@@ -382,7 +394,7 @@ class DreamWriter(rep.Writer):
             keypoints.append(
                 {
                     "name": name,
-                    "location": [pos_3d[0], pos_3d[1], pos_3d[2]],
+                    "location": [pos_3d[0] * 100.0, pos_3d[1] * 100.0, pos_3d[2] * 100.0], # to cm
                     "projected_location": pos_2d,
                 }
             )
@@ -390,16 +402,25 @@ class DreamWriter(rep.Writer):
             # orientation
             quat = transform.ExtractRotation().GetQuaternion()
             keypoint_orientations[name] = [
-                quat.GetReal(),
                 quat.GetImaginary()[0],
                 quat.GetImaginary()[1],
                 quat.GetImaginary()[2],
+                quat.GetReal(),
             ]
 
         for joint_name, joint_path in self.robot_joints.items():
             _add_kp(joint_name, joint_path)
         for link_name, link_path in self.robot_links.items():
             _add_kp(link_name, link_path)
+
+        # add link8 to comply with the urdf
+        hand_kp = next(kp for kp in keypoints if kp['name'] == 'panda_hand')
+        link8_kp = hand_kp.copy()
+        link8_kp['name'] = 'panda_link8'
+        keypoints.append(link8_kp)
+
+        # there's a rotation offset but ignore for now
+        keypoint_orientations['panda_link8'] = keypoint_orientations['panda_hand']
 
         return keypoints, keypoint_orientations
 
@@ -456,7 +477,7 @@ class DreamWriter(rep.Writer):
                     dict(
                         name=f"/{robot_name}/{obj['name']}",
                         pose=dict(
-                            position=obj["location"],
+                            position=[x / 100.0 for x in obj["location"]],  # cm to m
                             orientation=self.keypoint_orientations[obj["name"]]
                         )
                     )
@@ -469,7 +490,7 @@ class DreamWriter(rep.Writer):
             dict(
                 name="panda_arm_hand_DR",
                 pose=dict(
-                    position=robot_obj["location"],
+                    position=[x / 100.0 for x in robot_obj["location"]],  # cm to m
                     orientation=robot_obj["quaternion_xyzw"]
                 )
             )
