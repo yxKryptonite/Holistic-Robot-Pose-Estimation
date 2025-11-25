@@ -66,6 +66,10 @@ class DreamWriter(rep.Writer):
         self.robot_links = None
         self.robot_joints = None
 
+        # for _object_settings.json
+        self.num_objects_required = len(semantic_classes)
+        self.discovered_classes = {}
+
     def write(self, data):
         cam_params = data["camera_params"]
         # --- SAVE ONCE ---
@@ -136,6 +140,20 @@ class DreamWriter(rep.Writer):
         buf.write(json.dumps(json_dict, indent=4).encode())
         self.backend.write_blob("_camera_settings.json", buf.getvalue())
 
+    def _flush_object_settings(self):
+        """Writes the current state of discovered classes to disk."""
+        exported_objects = list(self.discovered_classes.values())
+        exported_classes = list(self.discovered_classes.keys())
+
+        json_data = {
+            "exported_object_classes": exported_classes,
+            "exported_objects": exported_objects
+        }
+
+        buf = io.BytesIO()
+        buf.write(json.dumps(json_data, indent=4).encode())
+        self.backend.write_blob("_object_settings.json", buf.getvalue())
+
     def _extract_camera_data(self, cam_params):
         world2cam = Gf.Matrix4d(*cam_params["cameraViewTransform"])
         cam2world = world2cam.GetInverse()
@@ -187,6 +205,28 @@ class DreamWriter(rep.Writer):
             x_max = float(bbox_3d_data[idx]["x_max"])
             y_max = float(bbox_3d_data[idx]["y_max"])
             z_max = float(bbox_3d_data[idx]["z_max"])
+
+            # update discovered classes if needed
+            if len(self.discovered_classes) < self.num_objects_required:
+                if semantic_class not in self.discovered_classes:
+                    # dims in cm
+                    width = (x_max - x_min) * 100.0
+                    height = (y_max - y_min) * 100.0
+                    depth = (z_max - z_min) * 100.0
+
+                    self.discovered_classes[semantic_class] = {
+                        "class": semantic_class,
+                        "segmentation_class_id": int(semantic_id),
+                        "segmentation_instance_id": 0,
+                        "fixed_model_transform": [
+                            [0, 0, 1, 0],
+                            [-1, 0, 0, 0],
+                            [0, -1, 0, 0],
+                            [0, 0, 0, 1]
+                        ],
+                        "cuboid_dimensions": [width, height, depth]
+                    }
+                    self._flush_object_settings()
 
             # define 8 corners in local frame
             corners_local = [
