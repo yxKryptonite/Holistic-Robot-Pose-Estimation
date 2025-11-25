@@ -202,6 +202,16 @@ class DreamWriter(rep.Writer):
 
         return {"location_worldframe": pos, "quaternion_xyzw_worldframe": quat}
 
+    def _compute_robot_world_bbox(self, robot_prim_path):
+        stage = omni.usd.get_context().get_stage()
+        prim = stage.GetPrimAtPath(robot_prim_path)
+
+        bbox_cache = UsdGeom.BBoxCache(
+            Usd.TimeCode.Default(), [UsdGeom.Tokens.default_, UsdGeom.Tokens.render]
+        )
+        bound = bbox_cache.ComputeWorldBound(prim)
+        return bound.GetRange()
+
     def _extract_objects(self, data, gf_view_proj: Gf.Matrix4d):
         """
         Note: Visible objects will be included in bounding_box_2d_tight.
@@ -231,21 +241,49 @@ class DreamWriter(rep.Writer):
             # robot must always be included
             is_robot = "panda_robot" in semantic_class
 
-            need_manual_bbox_2d = False
-
-            if semantic_id in semantic_id_to_bbox_2d:
-                pass
-            elif is_robot:
-                need_manual_bbox_2d = True
-            else:
-                continue
-
             x_min = float(bbox_3d_data[idx]["x_min"])
             y_min = float(bbox_3d_data[idx]["y_min"])
             z_min = float(bbox_3d_data[idx]["z_min"])
             x_max = float(bbox_3d_data[idx]["x_max"])
             y_max = float(bbox_3d_data[idx]["y_max"])
             z_max = float(bbox_3d_data[idx]["z_max"])
+
+            # transform to world frame
+            raw_transform = bbox_3d_data[idx]["transform"].flatten().tolist()
+            gf_transform = Gf.Matrix4d(*raw_transform)
+
+            if is_robot:
+                robot_range = self._compute_robot_world_bbox("/World/RobotRig/Panda")
+
+                r_min = robot_range.GetMin()
+                r_max = robot_range.GetMax()
+
+                corners_world = [
+                    Gf.Vec3d(r_min[0], r_min[1], r_min[2]),
+                    Gf.Vec3d(r_max[0], r_min[1], r_min[2]),
+                    Gf.Vec3d(r_min[0], r_max[1], r_min[2]),
+                    Gf.Vec3d(r_max[0], r_max[1], r_min[2]),
+                    Gf.Vec3d(r_min[0], r_min[1], r_max[2]),
+                    Gf.Vec3d(r_max[0], r_min[1], r_max[2]),
+                    Gf.Vec3d(r_min[0], r_max[1], r_max[2]),
+                    Gf.Vec3d(r_max[0], r_max[1], r_max[2]),
+                ]
+            elif semantic_id in semantic_id_to_bbox_2d:
+                # define 8 corners in local frame
+                corners_local = [
+                    Gf.Vec3d(x_min, y_min, z_min),
+                    Gf.Vec3d(x_max, y_min, z_min),
+                    Gf.Vec3d(x_min, y_max, z_min),
+                    Gf.Vec3d(x_max, y_max, z_min),
+                    Gf.Vec3d(x_min, y_min, z_max),
+                    Gf.Vec3d(x_max, y_min, z_max),
+                    Gf.Vec3d(x_min, y_max, z_max),
+                    Gf.Vec3d(x_max, y_max, z_max),
+                ]
+
+                corners_world = [gf_transform.Transform(c) for c in corners_local]
+            else:
+                continue
 
             # update discovered classes if needed
             if len(self.discovered_classes) < self.num_objects_required:
@@ -269,27 +307,10 @@ class DreamWriter(rep.Writer):
                     }
                     self._flush_object_settings()
 
-            # define 8 corners in local frame
-            corners_local = [
-                Gf.Vec3d(x_min, y_min, z_min),
-                Gf.Vec3d(x_max, y_min, z_min),
-                Gf.Vec3d(x_min, y_max, z_min),
-                Gf.Vec3d(x_max, y_max, z_min),
-                Gf.Vec3d(x_min, y_min, z_max),
-                Gf.Vec3d(x_max, y_min, z_max),
-                Gf.Vec3d(x_min, y_max, z_max),
-                Gf.Vec3d(x_max, y_max, z_max),
-            ]
-
-            # transform to world frame
-            raw_transform = bbox_3d_data[idx]["transform"].flatten().tolist()
-            gf_transform = Gf.Matrix4d(*raw_transform)
-            corners_world = [gf_transform.Transform(c) for c in corners_local]
-
             # project cuboid corners to 2D
             projected_cuboid = self._project_points(corners_world, gf_view_proj)
 
-            if need_manual_bbox_2d:
+            if is_robot:
                 # manual bbox 2d for the robot if missing
                 x_coords = [pt[0] for pt in projected_cuboid]
                 y_coords = [pt[1] for pt in projected_cuboid]
@@ -300,8 +321,10 @@ class DreamWriter(rep.Writer):
                 max_x = min(width, max(x_coords))
                 max_y = min(height, max(y_coords))
 
-                if max_x <= min_x: max_x = min_x + 1
-                if max_y <= min_y: max_y = min_y + 1
+                if max_x <= min_x:
+                    max_x = min_x + 1
+                if max_y <= min_y:
+                    max_y = min_y + 1
 
                 bbox_2d_entry = {
                     "min": [float(min_x), float(min_y)],
