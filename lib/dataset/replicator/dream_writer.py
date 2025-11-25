@@ -111,7 +111,10 @@ class DreamWriter(rep.Writer):
         gf_proj = Gf.Matrix4d(*cam_params["cameraProjection"])
         gf_view_proj = gf_view * gf_proj
 
-        objects = self._extract_objects(data, gf_view_proj)
+        gl_to_cv = Gf.Matrix4d().SetScale(Gf.Vec3d(1, -1, -1))
+        gf_world2cam_cv = gf_view * gl_to_cv
+
+        objects = self._extract_objects(data, gf_view_proj, gf_world2cam_cv)
 
         # 6. sim_state - must be called after objects extraction
         sim_state = self._extract_sim_state(
@@ -212,7 +215,7 @@ class DreamWriter(rep.Writer):
         bound = bbox_cache.ComputeWorldBound(prim)
         return bound.GetRange()
 
-    def _extract_objects(self, data, gf_view_proj: Gf.Matrix4d):
+    def _extract_objects(self, data, gf_view_proj: Gf.Matrix4d, gf_world2cam_cv: Gf.Matrix4d):
         """
         Note: Visible objects will be included in bounding_box_2d_tight.
         """
@@ -249,8 +252,9 @@ class DreamWriter(rep.Writer):
             z_max = float(bbox_3d_data[idx]["z_max"])
 
             # transform to world frame
-            raw_transform = bbox_3d_data[idx]["transform"].flatten().tolist()
-            gf_transform = Gf.Matrix4d(*raw_transform)
+            raw_local2world = bbox_3d_data[idx]["transform"].flatten().tolist()
+            gf_local2world = Gf.Matrix4d(*raw_local2world)
+            gf_local2cam = gf_local2world * gf_world2cam_cv
 
             if is_robot:
                 robot_range = self._compute_robot_world_bbox("/World/RobotRig/Panda")
@@ -281,9 +285,11 @@ class DreamWriter(rep.Writer):
                     Gf.Vec3d(x_max, y_max, z_max),
                 ]
 
-                corners_world = [gf_transform.Transform(c) for c in corners_local]
+                corners_world = [gf_local2world.Transform(c) for c in corners_local]
             else:
                 continue
+
+            corners_cam = [gf_world2cam_cv.Transform(c) for c in corners_world]
 
             # update discovered classes if needed
             if len(self.discovered_classes) < self.num_objects_required:
@@ -334,13 +340,16 @@ class DreamWriter(rep.Writer):
 
             # cuboid centroid
             centroid_world = sum(corners_world, Gf.Vec3d(0, 0, 0)) / len(corners_world)
+            centroid_cam = gf_world2cam_cv.Transform(centroid_world)
             projected_centroid = self._project_points([centroid_world], gf_view_proj)[0]
 
             # keypoints
             keypoints = []
             # Special handling for Robot
             if "panda_robot" in semantic_class.lower():
-                keypoints, self.keypoint_orientations = self._get_robot_keypoints(gf_view_proj)
+                keypoints, self.keypoint_orientations = self._get_robot_keypoints(
+                    gf_view_proj, gf_world2cam_cv
+                )
             else:
                 keypoints.append(
                     {
@@ -355,8 +364,8 @@ class DreamWriter(rep.Writer):
                 )
 
             # pose
-            trans = gf_transform.ExtractTranslation()
-            rot = gf_transform.ExtractRotation().GetQuaternion()
+            trans = gf_local2cam.ExtractTranslation()
+            rot = gf_local2cam.ExtractRotation().GetQuaternion()
             quat = [
                 rot.GetImaginary()[0],
                 rot.GetImaginary()[1],
@@ -377,13 +386,13 @@ class DreamWriter(rep.Writer):
                 "quaternion_xyzw": quat,
                 "pose_transform": pose_transform_cm.tolist(), # to cm
                 "cuboid_centroid": [
-                    centroid_world[0] * 100.0, # to cm
-                    centroid_world[1] * 100.0, # to cm
-                    centroid_world[2] * 100.0, # to cm
+                    centroid_cam[0] * 100.0, # to cm
+                    centroid_cam[1] * 100.0, # to cm
+                    centroid_cam[2] * 100.0, # to cm
                 ],
                 "projected_cuboid_centroid": projected_centroid,
                 "bounding_box": semantic_id_to_bbox_2d[semantic_id],
-                "cuboid": [[c[0] * 100.0, c[1] * 100.0, c[2] * 100.0] for c in corners_world], # to cm
+                "cuboid": [[c[0] * 100.0, c[1] * 100.0, c[2] * 100.0] for c in corners_cam], # to cm
                 "projected_cuboid": projected_cuboid,
                 "keypoints": keypoints,
             }
@@ -395,7 +404,7 @@ class DreamWriter(rep.Writer):
 
         return objects
 
-    def _get_robot_keypoints(self, gf_view_proj: Gf.Matrix4d):
+    def _get_robot_keypoints(self, gf_view_proj: Gf.Matrix4d, gf_world2cam_cv: Gf.Matrix4d):
         stage = omni.usd.get_context().get_stage()
 
         if self.robot_joints is None and self.robot_links is None:
@@ -409,10 +418,12 @@ class DreamWriter(rep.Writer):
         def _add_kp(name, path):
             prim = stage.GetPrimAtPath(path)
 
-            transform = omni.usd.get_world_transform_matrix(prim)
-            pos_3d = transform.ExtractTranslation()
+            gf_local2world = omni.usd.get_world_transform_matrix(prim)
+            gf_local2cam = gf_local2world * gf_world2cam_cv
+            pos_3d_world = gf_local2world.ExtractTranslation()
+            pos_3d = gf_world2cam_cv.Transform(pos_3d_world)
 
-            pos_2d = self._project_points([pos_3d], gf_view_proj)[0]
+            pos_2d = self._project_points([pos_3d_world], gf_view_proj)[0]
 
             keypoints.append(
                 {
@@ -423,7 +434,7 @@ class DreamWriter(rep.Writer):
             )
 
             # orientation
-            quat = transform.ExtractRotation().GetQuaternion()
+            quat = gf_local2cam.ExtractRotation().GetQuaternion()
             keypoint_orientations[name] = [
                 quat.GetImaginary()[0],
                 quat.GetImaginary()[1],
