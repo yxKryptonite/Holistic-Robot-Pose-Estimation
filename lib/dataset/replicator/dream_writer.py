@@ -194,10 +194,19 @@ class DreamWriter(rep.Writer):
         # and fill in the object dict
         for idx in range(len(bbox_3d_data)):
             semantic_id = bbox_3d_data[idx]["semanticId"]
-            if semantic_id not in semantic_id_to_bbox_2d:
-                continue  # skip non-visible objects
+            semantic_class = bbox_3d_info["idToLabels"][str(semantic_id)]["class"]
 
-            semantic_class = bbox_2d_info["idToLabels"][str(semantic_id)]["class"]
+            # robot must always be included
+            is_robot = "panda_robot" in semantic_class
+
+            need_manual_bbox_2d = False
+
+            if semantic_id in semantic_id_to_bbox_2d:
+                pass
+            elif is_robot:
+                need_manual_bbox_2d = True
+            else:
+                continue
 
             x_min = float(bbox_3d_data[idx]["x_min"])
             y_min = float(bbox_3d_data[idx]["y_min"])
@@ -247,6 +256,16 @@ class DreamWriter(rep.Writer):
 
             # project cuboid corners to 2D
             projected_cuboid = self._project_points(corners_world, gf_view_proj)
+
+            if need_manual_bbox_2d:
+                # manual bbox 2d for the robot if missing
+                x_coords = [pt[0] for pt in projected_cuboid]
+                y_coords = [pt[1] for pt in projected_cuboid]
+                bbox_2d_entry = {
+                    "min": [min(x_coords), min(y_coords)],
+                    "max": [max(x_coords), max(y_coords)],
+                }
+                semantic_id_to_bbox_2d[semantic_id] = bbox_2d_entry
 
             # cuboid centroid
             centroid_world = sum(corners_world, Gf.Vec3d(0, 0, 0)) / len(corners_world)
