@@ -261,9 +261,16 @@ class DreamWriter(rep.Writer):
                 # manual bbox 2d for the robot if missing
                 x_coords = [pt[0] for pt in projected_cuboid]
                 y_coords = [pt[1] for pt in projected_cuboid]
+                # clip to image bounds
+                width, height = self.resolution
+                min_x = max(0, min(x_coords))
+                min_y = max(0, min(y_coords))
+                max_x = min(width, max(x_coords))
+                max_y = min(height, max(y_coords))
+
                 bbox_2d_entry = {
-                    "min": [min(x_coords), min(y_coords)],
-                    "max": [max(x_coords), max(y_coords)],
+                    "min": [float(min_x), float(min_y)],
+                    "max": [float(max_x), float(max_y)],
                 }
                 semantic_id_to_bbox_2d[semantic_id] = bbox_2d_entry
 
