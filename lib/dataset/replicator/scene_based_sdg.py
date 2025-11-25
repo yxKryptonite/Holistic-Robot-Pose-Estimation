@@ -264,6 +264,40 @@ panda_prim = prims.create_prim(
     position=(0, 0, tabletop_height),
     semantic_label="panda_robot"
 )
+# create some rough collision geometry for the robot
+robot_path = str(panda_prim.GetPath())
+
+link0_collision = rep.create.cylinder(
+    parent=f"{robot_path}/panda_link0",
+    position=(0, 0, 0.13), scale=(0.3, 0.3, 0.3),
+    visible=False, name="Link0Collision"
+)
+link2_collision = rep.create.cylinder(
+    parent=f"{robot_path}/panda_link2",
+    position=(0, -0.1, 0),
+    rotation=(90, 0, 0),
+    scale=(0.25, 0.25, 0.3),
+    visible=False, name="Link2Collision"
+)
+link4_collision = rep.create.cylinder(
+    parent=f"{robot_path}/panda_link4",
+    position=(0, 0, 0), scale=(0.2, 0.2, 0.25),
+    visible=False, name="Link4Collision"
+)
+link5_collision = rep.create.cylinder(
+    parent=f"{robot_path}/panda_link5",
+    position=(0, 0, -0.1), scale=(0.2, 0.2, 0.4),
+    visible=False, name="Link5Collision"
+)
+hand_collision = rep.create.sphere(
+    parent=f"{robot_path}/panda_hand",
+    position=(0, 0, 0.1), scale=0.25,
+    visible=False, name="HandCollision"
+)
+robot_collision_prims = [
+    link0_collision, link2_collision,
+    link4_collision, link5_collision, hand_collision
+]
 robot_cam_container = prims.create_prim(
     prim_path="/World/RobotRig/RobotCamContainer",
     prim_type="Xform",
@@ -286,19 +320,32 @@ rig_path = str(rig_prim.GetPath())
 rig_group = rep.create.group([rig_path])
 
 # flying distractors
+flying_distractor_path = "/World/RobotRig/Distractors"
 distractor_container = prims.create_prim(
-    prim_path="/World/RobotRig/Distractors",
+    prim_path=flying_distractor_path,
+    prim_type="Xform",
+)
+table_distractor_path = "/World/RobotRig/TableDistractors"
+table_distractor_container = prims.create_prim(
+    prim_path=table_distractor_path,
     prim_type="Xform",
 )
 
 # Register randomization graphs
 scene_based_sdg_utils.register_flying_distractors(
-    distractor_grp_path="/World/RobotRig/Distractors",
+    distractor_grp_path=flying_distractor_path,
     asset_root_path=assets_root_path,
     asset_list=config["distractors"],
-    panda_prim=panda_prim,
-    volume_min=(-2.0, -2.0, 0.5),
-    volume_max=(2.0, 2.0, 2.5)
+    robot_collision_prims=robot_collision_prims,
+    volume_min=(-1.5, -1.5, 0.5),
+    volume_max=(1.5, 1.5, 2.5)
+)
+scene_based_sdg_utils.register_table_scatter(
+    parent_path=table_distractor_path,
+    robot_base_collision_prim=link0_collision,
+    surface_plane=tabletop_plane,
+    asset_list=config["distractors"],
+    assets_root_path=assets_root_path,
 )
 scene_based_sdg_utils.register_lights_placement(panda_prim)
 
@@ -359,8 +406,9 @@ with rep.trigger.on_frame():
     with robot_cam:
         rep.modify.pose(look_at=robot_look_target_prim)
 
-    # flying distractors
+    # flying and table distractors
     rep.randomizer.randomize_distractors()
+    rep.randomizer.randomize_table_items()
 
 # Initialize the Robot
 world = World(physics_dt=1.0 / 90.0, stage_units_in_meters=1.0)
