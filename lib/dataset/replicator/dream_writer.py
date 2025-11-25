@@ -31,10 +31,10 @@ def get_robot_links_and_joints(prim):
 
         is_joint = child.IsA(UsdPhysics.Joint) if hasattr(UsdPhysics, "Joint") else "Joint" in type_name
 
-        if "link" in name.lower():
-            links[name] = str(path)
-        elif "joint" in name.lower() or is_joint:
+        if "joint" in name.lower() or is_joint:
             joints[name] = str(path)
+        elif "link" in name or "finger" in name or "hand" in name:
+            links[name] = str(path)
 
     return links, joints
 
@@ -70,6 +70,13 @@ class DreamWriter(rep.Writer):
         self.num_objects_required = len(semantic_classes)
         self.discovered_classes = {}
 
+        # for sim_state
+        self.sim_state_camera = None
+        self.keypoint_orientations = dict()
+
+        # to be set externally
+        self.joint_positions = None
+
     def write(self, data):
         cam_params = data["camera_params"]
         # --- SAVE ONCE ---
@@ -87,6 +94,16 @@ class DreamWriter(rep.Writer):
         # 4. camera_data
         camera_data = self._extract_camera_data(cam_params)
 
+        # cache sim_state camera
+        if self.sim_state_camera is None:
+            self.sim_state_camera = dict(
+                name="sim_cam",
+                pose=dict(
+                    position=camera_data["location_worldframe"],
+                    orientation=camera_data["quaternion_xyzw_worldframe"],
+                )
+            )
+
         # 5. objects
         gf_view = Gf.Matrix4d(*cam_params["cameraViewTransform"])
         gf_proj = Gf.Matrix4d(*cam_params["cameraProjection"])
@@ -94,13 +111,20 @@ class DreamWriter(rep.Writer):
 
         objects = self._extract_objects(data, gf_view_proj)
 
-        # 6. Build JSON Structure
+        # 6. sim_state - must be called after objects extraction
+        sim_state = self._extract_sim_state(
+            data,
+            objects[0]
+        )
+
+        # 7. Build JSON Structure
         json_data = {
             "camera_data": camera_data,
             "objects": objects,
+            "sim_state": sim_state,
         }
 
-        # 7. Write JSON
+        # 8. Write JSON
         buf = io.BytesIO()
         buf.write(json.dumps(json_data, indent=4).encode())
         self.backend.write_blob(f"{filename}.json", buf.getvalue())
@@ -142,8 +166,13 @@ class DreamWriter(rep.Writer):
 
     def _flush_object_settings(self):
         """Writes the current state of discovered classes to disk."""
-        exported_objects = list(self.discovered_classes.values())
-        exported_classes = list(self.discovered_classes.keys())
+        robot_val = []
+        robot_key = []
+        if "panda_robot" in self.discovered_classes:
+            robot_key = ["panda_robot"]
+            robot_val = [self.discovered_classes.pop("panda_robot")]
+        exported_objects = robot_val + list(self.discovered_classes.values())
+        exported_classes = robot_key + list(self.discovered_classes.keys())
 
         json_data = {
             "exported_object_classes": exported_classes,
@@ -282,7 +311,7 @@ class DreamWriter(rep.Writer):
             keypoints = []
             # Special handling for Robot
             if "panda_robot" in semantic_class.lower():
-                keypoints = self._get_robot_keypoints(gf_view_proj)
+                keypoints, self.keypoint_orientations = self._get_robot_keypoints(gf_view_proj)
             else:
                 keypoints.append(
                     {
@@ -323,7 +352,11 @@ class DreamWriter(rep.Writer):
                 "projected_cuboid": projected_cuboid,
                 "keypoints": keypoints,
             }
-            objects.append(obj_entry)
+            if "panda_robot" in semantic_class.lower():
+                # insert to front
+                objects.insert(0, obj_entry)
+            else:
+                objects.append(obj_entry)
 
         return objects
 
@@ -336,6 +369,7 @@ class DreamWriter(rep.Writer):
             )
 
         keypoints = []
+        keypoint_orientations = dict()
 
         def _add_kp(name, path):
             prim = stage.GetPrimAtPath(path)
@@ -353,12 +387,21 @@ class DreamWriter(rep.Writer):
                 }
             )
 
+            # orientation
+            quat = transform.ExtractRotation().GetQuaternion()
+            keypoint_orientations[name] = [
+                quat.GetReal(),
+                quat.GetImaginary()[0],
+                quat.GetImaginary()[1],
+                quat.GetImaginary()[2],
+            ]
+
         for joint_name, joint_path in self.robot_joints.items():
             _add_kp(joint_name, joint_path)
         for link_name, link_path in self.robot_links.items():
             _add_kp(link_name, link_path)
 
-        return keypoints
+        return keypoints, keypoint_orientations
 
     def _project_points(self, points_3d: list[Gf.Vec3d], gf_view_proj: Gf.Matrix4d):
         """
@@ -384,3 +427,58 @@ class DreamWriter(rep.Writer):
             points_2d.append([x_pixel, y_pixel])
 
         return points_2d
+
+    def _extract_sim_state_joints(self, data, robot_name="panda_arm_hand_DR"):
+        stage = omni.usd.get_context().get_stage()
+        if self.robot_joints is None:
+            self.robot_links, self.robot_joints = get_robot_links_and_joints(
+                stage.GetPrimAtPath("/World/RobotRig/Panda")
+            )
+
+        joints_list = []
+
+        for name in self.robot_joints.keys():
+            if "panda_" not in name:
+                continue
+
+            joints_list.append({
+                "name": f"/{robot_name}/{name}",
+                "position": self.joint_positions[name],
+                "velocity": 0.0
+            })
+        return joints_list
+
+    def _extract_sim_state_links(self, robot_obj, robot_name="panda_arm_hand_DR"):
+        link_states = []
+        for obj in robot_obj["keypoints"]:
+            if "panda_" in obj["name"] and "joint" not in obj["name"]:
+                link_states.append(
+                    dict(
+                        name=f"/{robot_name}/{obj['name']}",
+                        pose=dict(
+                            position=obj["location"],
+                            orientation=self.keypoint_orientations[obj["name"]]
+                        )
+                    )
+                )
+        return link_states
+
+    def _extract_sim_state(self, data, robot_obj):
+        entities = [
+            self.sim_state_camera,
+            dict(
+                name="panda_arm_hand_DR",
+                pose=dict(
+                    position=robot_obj["location"],
+                    orientation=robot_obj["quaternion_xyzw"]
+                )
+            )
+        ]
+        link_states = self._extract_sim_state_links(robot_obj)
+        joint_states = self._extract_sim_state_joints(data)
+
+        return dict(
+            entities=entities,
+            links=link_states,
+            joints=joint_states
+        )

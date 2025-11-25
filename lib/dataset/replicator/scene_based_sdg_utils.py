@@ -289,6 +289,7 @@ def randomize_robot_joints(panda_robot, lower_limits, upper_limits):
     panda_robot.initialize()
     panda_robot.set_joint_positions(random_pos)
     world.step(render=False)
+    return random_pos
 
 
 def register_flying_distractors(

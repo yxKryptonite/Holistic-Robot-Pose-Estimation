@@ -36,7 +36,7 @@ config = {
     "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
     "writer": "DreamWriter",
     "writer_config": {
-        "output_dir": "_out_16825",
+        "output_dir": "_out_16824",
         "resolution": [640, 480],
     },
     "clear_previous_semantics": True,
@@ -261,7 +261,7 @@ table_variations = scene_based_sdg_utils.spawn_table_variations(
 panda_prim = prims.create_prim(
     prim_path="/World/RobotRig/Panda",
     usd_path=robot_usd,
-    position=(0, 0, tabletop_height),
+    position=(0, 0, tabletop_height + 0.01),
     semantic_label="panda_robot"
 )
 # create some rough collision geometry for the robot
@@ -449,13 +449,23 @@ for i in range(num_frames):
         cam_container_prim=robot_cam_container,
         min_dist=1.5,
         max_dist=3.5,
-        min_height=0.5,
+        min_height=0.8,
         max_height=2.5
     )
     # randomize robot joints
-    scene_based_sdg_utils.randomize_robot_joints(
+    joint_positions = scene_based_sdg_utils.randomize_robot_joints(
         panda_robot, lower_limits, upper_limits
     )
+
+    joint_map = {}
+    for j in range(7):
+        joint_map[f"panda_joint{j + 1}"] = joint_positions[j]
+
+    joint_map["panda_hand_joint"] = 0.0
+    joint_map["panda_finger_joint1"] = joint_positions[7]
+    joint_map["panda_finger_joint2"] = joint_positions[8]
+
+    writer.joint_positions = joint_map
 
     # Trigger any on_frame registered randomizers and the writers (delta_time=0.0 to avoid advancing the timeline)
     rep.orchestrator.step(delta_time=0.0, rt_subframes=rt_subframes)
