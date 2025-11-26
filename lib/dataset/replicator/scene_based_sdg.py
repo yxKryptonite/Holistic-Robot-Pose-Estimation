@@ -28,15 +28,15 @@ from isaacsim import SimulationApp
 config = {
     "launch_config": {
         "renderer": "RaytracedLighting",
-        "headless": False,
+        "headless": True,
     },
     "resolution": [640, 480],
-    "rt_subframes": 16,
-    "num_frames": 10,
+    "rt_subframes": 4,
+    "num_frames": 100,
     "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
     "writer": "DreamWriter",
     "writer_config": {
-        "output_dir": "_out_16824",
+        "output_dir": "sdg_output/panda_test_100",
         "resolution": [640, 480],
     },
     "clear_previous_semantics": True,
@@ -347,7 +347,7 @@ scene_based_sdg_utils.register_table_scatter(
     asset_list=config["distractors"],
     assets_root_path=assets_root_path,
 )
-scene_based_sdg_utils.register_lights_placement(panda_prim)
+scene_based_sdg_utils.register_lights_placement(rig_prim)
 
 # Create render products for the custom cameras and attach them to the writer
 resolution = config.get("resolution", (512, 512))
