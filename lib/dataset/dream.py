@@ -1,5 +1,5 @@
 import os
-import sys
+import sys, re
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import json
 import random
@@ -112,6 +112,18 @@ class DreamDataset(torch.utils.data.Dataset):
         rgb_path = Path(row.rgb_path)
         assert rgb_path
         rgb = np.asarray(Image.open(rgb_path))
+
+        m = re.search(r'/data(?P<middle>/.+)(?=\.depth\.jpg$)', str(rgb_path))
+        if m:
+            middle = m.group('middle')
+        else:
+            RuntimeError(f"Regex failure in dream.py")
+
+        # Point this to the path where the rgb images or stored
+        # The depth images are located under the actual data dir
+        actual_rgb_path = "/home/cj/Desktop/16824/baseline_data" + middle + ".rgb.jpg"
+        actual_rgb = np.asarray(Image.open(actual_rgb_path))
+        actual_images_orginal = torch.from_numpy(actual_rgb.copy()).float().permute(2, 0, 1)
 
         #rgb_np = rgb.copy()
         if rgb.ndim == 2:
@@ -272,6 +284,7 @@ class DreamDataset(torch.utils.data.Dataset):
                 "image_id": idx,
                 "scene_id": scene_id,
                 "images_original": images_original,
+                "actual_images_original": actual_images_orginal,
                 "bbox_strict_bounded_original": bbox_strict_bounded_original,
                 "bbox_gt2d_extended_original": bbox_gt2d_extended_original,
                 "TCO": TCO_r,
@@ -408,6 +421,7 @@ class DreamDataset(torch.utils.data.Dataset):
                 "image_id": shared_data["image_id"],
                 "scene_id": shared_data["scene_id"],
                 "images_original": shared_data["images_original"],
+                "actual_images_original": shared_data["actual_images_original"],
                 "bbox_strict_bounded_original": shared_data["bbox_strict_bounded_original"],
                 "bbox_gt2d_extended_original": shared_data["bbox_gt2d_extended_original"],
                 "TCO":shared_data["TCO"],

@@ -155,7 +155,7 @@ def train_sim2real(args):
             other_K = cast(input_batch["other"]["K"],device).float()
             
             images_id = input_batch["image_id"]
-            images_original = cast(input_batch["images_original"],device).float() / 255.
+            images_original = cast(input_batch["actual_images_original"],device).float() / 255.
             images_original_255 = images_original * 255.
             TCO = cast(input_batch["TCO"],device).float()
             K_original = cast(input_batch["K_original"],device).float()
