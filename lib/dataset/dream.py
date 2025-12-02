@@ -112,7 +112,15 @@ class DreamDataset(torch.utils.data.Dataset):
         rgb_path = Path(row.rgb_path)
         assert rgb_path
         rgb = np.asarray(Image.open(rgb_path))
+
+        #rgb_np = rgb.copy()
+        if rgb.ndim == 2:
+            rgb = np.repeat(rgb[..., None], 3, axis=2)
+
+        #images_original = torch.from_numpy(rgb_np).float().permute(2, 0, 1)
+
         images_original = torch.FloatTensor(rgb.copy()).permute(2,0,1)
+
         mask = None
         annotations = json.loads(rgb_path.with_suffix('').with_suffix('.json').read_text())
 

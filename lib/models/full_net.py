@@ -416,7 +416,7 @@ def get_rootNetwithRegInt_model(init_params_dict, args, **kwargs):
     
     if args.pretrained_rootnet is not None:
         pretrained_path = args.pretrained_rootnet
-        pretrained_checkpoint = torch.load(pretrained_path)
+        pretrained_checkpoint = torch.load(pretrained_path, weights_only=False)
         print(f"Using {args.pretrained_rootnet} as pretrained rootnet weights for rootNetwithRegInt pipeline. ")
         pretrained_rootnet_weights = pretrained_checkpoint["model_state_dict"]
         pretrained_weights = {}
