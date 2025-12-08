@@ -194,14 +194,14 @@ def register_cone_placement(forklift_prim, assets_root_path, config):
 def register_lights_placement(robot_prim):
     bb_cache = create_bbox_cache()
     combined_range_arr = compute_combined_aabb(bb_cache, [robot_prim.GetPrimPath()])
-    pos_min = (combined_range_arr[0], combined_range_arr[1], 4)
-    pos_max = (combined_range_arr[3], combined_range_arr[4], 6)
+    pos_min = (combined_range_arr[0], combined_range_arr[1], 1)
+    pos_max = (combined_range_arr[3], combined_range_arr[4], 2)
 
     def randomize_lights():
         lights = rep.create.light(
             light_type="Sphere",
             color=rep.distribution.uniform((0.0, 0.0, 0.0), (1.0, 1.0, 1.0)),
-            intensity=rep.distribution.uniform(50, 4000),
+            intensity=rep.distribution.uniform(1000, 4000),
             position=rep.distribution.uniform(pos_min, pos_max),
             scale=rep.distribution.uniform(1, 4),
             count=2,

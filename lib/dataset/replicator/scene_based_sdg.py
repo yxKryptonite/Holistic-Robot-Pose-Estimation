@@ -31,12 +31,37 @@ config = {
         "headless": True,
     },
     "resolution": [640, 480],
-    "rt_subframes": 4,
-    "num_frames": 100,
-    "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
+    "rt_subframes": 8,
+    "num_frames": 2500,
+    # "env_url": "/Isaac/Environments/Simple_Warehouse/full_warehouse.usd",
+    # "env_url": "/Isaac/Environments/Hospital/hospital.usd",
+    # "env_url": "/Isaac/Environments/Office/office.usd",
+    # "env_url": "/Isaac/Environments/Simple_Room/simple_room.usd",
+    # "env_url": "/Isaac/Environments/Digital_Twin_Warehouse/small_warehouse_digital_twin.usd",
+    # "env_url": "/home/kqyk/isaacim-5.1.0/usrAssets/Apartment/scene_04.usd",
+    # "env": {
+    #     "url": "/home/kqyk/isaacim-5.1.0/usrAssets/Lightwheel_kitchen/KitchenRoom_RSS.usd",
+    #     "min_pos": [-2, -2, 0],
+    #     "max_pos": [2, 2, 0],
+    # },
+    # "env": {
+    #     "url": "/home/kqyk/isaacim-5.1.0/usrAssets/Living_room/scene_1.usd",
+    #     "min_pos": [-1, -1, 0],
+    #     "max_pos": [1, 1, 0],
+    # },
+    # "env": {
+    #     "url": "/home/kqyk/isaacim-5.1.0/usrAssets/Old_room/scene_1.usd",
+    #     "min_pos": [-2, -2, 0],
+    #     "max_pos": [2, 2, 0],
+    # },
+    "env": {
+        "url": "/home/kqyk/isaacim-5.1.0/usrAssets/Station/scene_1.usd",
+        "min_pos": [-2, -3, 0],
+        "max_pos": [2, 3, 0],
+    },
     "writer": "DreamWriter",
     "writer_config": {
-        "output_dir": "sdg_output/panda_test_100",
+        "output_dir": "sdg_output/panda_rep_10k",
         "resolution": [640, 480],
     },
     "clear_previous_semantics": True,
@@ -211,11 +236,15 @@ assets_root_path = get_assets_root_path()
 if assets_root_path is None:
     carb.log_error("Could not get nucleus server path, closing application..")
     simulation_app.close()
+if "/home" not in config["env"]["url"]:
+    env_root_path = assets_root_path
+else:
+    env_root_path = ""
 
 # Open the given environment in a new stage
-print(f"[scene_based_sdg] Loading Stage {config['env_url']}")
-if not open_stage(assets_root_path + config["env_url"]):
-    carb.log_error(f"Could not open stage{config['env_url']}, closing application..")
+print(f"[scene_based_sdg] Loading Stage {config['env']['url']}")
+if not open_stage(env_root_path + config["env"]["url"]):
+    carb.log_error(f"Could not open stage{config['env']['url']}, closing application..")
     simulation_app.close()
 
 # Disable capture on play (data generation will be triggered manually)
@@ -380,7 +409,8 @@ writer.initialize(
     **writer_kwargs,
     semantic_classes=["panda_robot"] + [
         config["distractors"][i]["class"] for i in range(len(config["distractors"]))
-    ]
+    ],
+    starting_frame_id=97519
 )
 
 # Attach writer to the render products
@@ -393,7 +423,10 @@ with rep.trigger.on_frame():
     # Randomize the panda base pose
     with rig_group:
         rep.modify.pose(
-            position=rep.distribution.uniform((-20, -2, 0), (-1, 3, 0)),
+            position=rep.distribution.uniform(
+                config["env"]["min_pos"],
+                config["env"]["max_pos"]
+            ),
             rotation=rep.distribution.uniform((0, 0, 0), (0, 0, 360))
         )
 

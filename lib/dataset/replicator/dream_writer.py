@@ -40,10 +40,17 @@ def get_robot_links_and_joints(prim):
 
 
 class DreamWriter(rep.Writer):
-    def __init__(self, output_dir: str, resolution: tuple, semantic_classes: list[str]):
+    def __init__(
+        self,
+        output_dir: str,
+        resolution: tuple,
+        semantic_classes: list[str],
+        starting_frame_id: int = 0,
+    ):
         self.output_dir = output_dir
         self.resolution = resolution
-        self.frame_id = 0
+        self.frame_id = starting_frame_id
+        self._first_frame = True
 
         self.backend = rep.BackendDispatch({"paths": {"out_dir": self.output_dir}})
 
@@ -81,8 +88,9 @@ class DreamWriter(rep.Writer):
         cam_params = data["camera_params"]
         # --- SAVE ONCE ---
         # 1. Save _camera_settings.json
-        if self.frame_id == 0:
+        if self._first_frame:
             self._write_camera_settings(cam_params)
+            self._first_frame = False
 
         # TODO: 2. Save _object_settings.json
 
