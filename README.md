@@ -1,4 +1,15 @@
-# Robot Pose Estimation
+# Holistic Robot Pose Estimation
+
+Different features are implemented in different branches:
+
+- `main`: Modified holistic robot pose estimation pipeline, shared across all other features.
+- `depth`: Using depth information to improve generalizability to unseen scenes.
+- `replicator-510`: Using Isaac Sim Replicator for large-scale synthetic data generation.
+- `vit_backbone_experiment`: Using ViT backbone for holistic robot pose estimation.
+
+- - -
+
+**Development note:**
 
 See original README [here](./README_original.md)
 
